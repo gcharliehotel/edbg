@@ -697,6 +697,7 @@ int main(int argc, char **argv)
   dap_disconnect();
   dap_led(0, 0);
 
+  verbose("calling dbg_close on exit");
   dbg_close();
 
   return 0;

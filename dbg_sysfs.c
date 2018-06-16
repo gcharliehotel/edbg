@@ -62,61 +62,63 @@ void save_file2(char *path, char *buf) {
 }
 
 #if 0
-void gpio_export(int num) {
+void gpio_export(gpio_t *gpio) {
   char buf[100];
-  snprintf(buf, sizeof(buf), "%d", num);
+  snprintf(buf, sizeof(buf), "%d", gpio->num);
   save_file2("/sys/class/gpio/export", buf);
 }
 
-void gpio_unexport(int num) {
+void gpio_unexport(gpio_t *gpio) {
   char buf[100];
-  snprintf(buf, sizeof(buf), "%d", num);
+  snprintf(buf, sizeof(buf), "%d", gpio->num);
   save_file2("/sys/class/gpio/unexport", buf);
 }
 #endif
 
-void gpio_set_path(char *buf, size_t size, int num, char *attribute) {
-  snprintf(buf, size, "/sys/class/gpio/gpio%d/%s", num, attribute);
+void gpio_set_path(gpio_t *gpio, char *buf, size_t size, char *attribute) {
+  snprintf(buf, size, "/sys/class/gpio/gpio%d/%s", gpio->num, attribute);
 }
 
-void gpio_set_as_output(int num, int initial_value) {
-  verbose("setting %d as output to %d\n", num, initial_value);
+void gpio_set_as_output(gpio_t *gpio, int initial_value) {
+  verbose("setting %d as output to %d\n", gpio->num, initial_value);
   char path[PATH_MAX];
-  gpio_set_path(path, sizeof(path), num, "direction");
+  gpio_set_path(gpio, path, sizeof(path), "direction");
   save_file2(path, initial_value ? "high" : "low");
 }
 
-void gpio_set_as_input(int num) {
-  verbose("setting %d as input\n");
+void gpio_set_as_input(gpio_t *gpio) {
+  verbose("setting %d as input\n", gpio->num);
   char path[PATH_MAX];
-  gpio_set_path(path, sizeof(path), num, "direction");
+  gpio_set_path(gpio, path, sizeof(path), "direction");
   save_file2(path, "in");
 }
 
-void gpio_set_pullup(int num) {
-  verbose("setting %d as pullup\n", num);
+void gpio_set_pullup(gpio_t *gpio) {
+  verbose("setting %d as pullup\n", gpio->num);
   // This might not work.
-  gpio_set_as_output(num, 1);
+  gpio_set_as_output(gpio, 1);
 }
 
 
-int gpio_open(int num) {
+void gpio_open(gpio_t *gpio) {
+  check(gpio->fd == -1, "reopening gpio?\n");
   char path[PATH_MAX];
-  gpio_set_path(path, sizeof(path), num, "value");
+  gpio_set_path(gpio, path, sizeof(path), "value");
   int fd = open(path, O_RDWR);
   verbose("opened gpio %s as %d\n", path, fd);
   if (fd < 0)
     perror_exit("open()");
-  return fd;
+  gpio->fd = fd;
 }
 
-int gpio_read(int fd) {
-  check(fd >= 0, "gpio_read: fd < 0");
-  if (lseek(fd, 0, SEEK_SET) < 0)
+int gpio_read(gpio_t *gpio) {
+  check(gpio->fd >= 0, "gpio_read: fd < 0");
+  if (lseek(gpio->fd, 0, SEEK_SET) < 0)
     perror_exit("lseek");
   char cc;
-  int n = read(fd, &cc, 1);
-  verbose("read gpio fd=%d as rc=%d, value=%d\n", fd, n, cc);
+  int n = read(gpio->fd, &cc, 1);
+  verbose("read gpio %d (fd=%d) as rc=%d, value=%d\n",
+	  gpio->num, gpio->fd, n, cc);
   if (n != 1)
     perror_exit("read");
   if (cc == '0') {
@@ -129,13 +131,13 @@ int gpio_read(int fd) {
   }
 }
 
-void gpio_set(int fd, int value) {
-  verbose("setting gpio fd=%d to %d\n", fd, value);
-  check(fd >= 0, "gpio_set: fd < 0");
-  if (lseek(fd, 0, SEEK_SET) < 0)
+void gpio_set(gpio_t *gpio, int value) {
+  verbose("setting gpio %d (fd=%d) to %d\n", gpio->num, gpio->fd, value);
+  check(gpio->fd >= 0, "gpio_set: fd < 0");
+  if (lseek(gpio->fd, 0, SEEK_SET) < 0)
     perror_exit("lseek");
   char cc = value ? '1' : '0';
-  int n = write(fd, &cc, 1);
+  int n = write(gpio->fd, &cc, 1);
   if (n != 1)
     perror_exit("write");
 }
@@ -147,13 +149,13 @@ void dbg_open(int swdio_gpio_num, int swclk_gpio_num)
   swdio_gpio.num = swdio_gpio_num;
   swclk_gpio.num = swclk_gpio_num;
 
-  //gpio_export(swdio_gpio.num);
-  gpio_set_as_input(swdio_gpio.num);
-  swdio_gpio.fd = gpio_open(swdio_gpio.num);
+  //gpio_export(swdio_gpio);
+  gpio_set_as_input(&swdio_gpio);
+  gpio_open(&swdio_gpio);
 
-  //gpio_export(swclk_gpio.num);
-  gpio_set_as_output(swclk_gpio.num, 0);
-  swclk_gpio.fd = gpio_open(swclk_gpio.num);
+  //gpio_export(swclk_gpio);
+  gpio_set_as_output(&swclk_gpio, 0);
+  gpio_open(&swclk_gpio);
 }
 
 //-----------------------------------------------------------------------------
@@ -329,13 +331,13 @@ static bool dap_swd_data_phase;
 
 static inline void DAP_CONFIG_SWCLK_TCK_write(int value)
 {
-  gpio_set(swclk_gpio.fd, value);
+  gpio_set(&swclk_gpio, value);
 }
 
 //-----------------------------------------------------------------------------
 static inline void DAP_CONFIG_SWDIO_TMS_write(int value)
 {
-  gpio_set(swdio_gpio.fd, value);
+  gpio_set(&swdio_gpio, value);
 }
 
 #if 0
@@ -361,13 +363,13 @@ static inline void DAP_CONFIG_nRESET_write(int value)
 //-----------------------------------------------------------------------------
 static inline int DAP_CONFIG_SWCLK_TCK_read(void)
 {
-  return gpio_read(swclk_gpio.fd);
+  return gpio_read(&swclk_gpio);
 }
 
 //-----------------------------------------------------------------------------
 static inline int DAP_CONFIG_SWDIO_TMS_read(void)
 {
-  return gpio_read(swdio_gpio.fd);
+  return gpio_read(&swdio_gpio);
 }
 
 #if 0
@@ -411,35 +413,35 @@ static inline void DAP_CONFIG_SWCLK_TCK_clr(void)
 //-----------------------------------------------------------------------------
 static inline void DAP_CONFIG_SWDIO_TMS_in(void)
 {
-  gpio_set_as_input(swdio_gpio.num);
+  gpio_set_as_input(&swdio_gpio);
 }
 
 //-----------------------------------------------------------------------------
 static inline void DAP_CONFIG_SWDIO_TMS_out(void)
 {
-  gpio_set_as_output(swdio_gpio.num, 0);
+  gpio_set_as_output(&swdio_gpio, 0);
 }
 
 //-----------------------------------------------------------------------------
 static inline void DAP_CONFIG_SETUP(void)
 {
-  gpio_set_as_input(swclk_gpio.num);
-  gpio_set_as_input(swdio_gpio.num);
-  gpio_set_pullup(swclk_gpio.num);
+  gpio_set_as_input(&swclk_gpio);
+  gpio_set_as_input(&swdio_gpio);
+  gpio_set_pullup(&swclk_gpio);
 }
 
 //-----------------------------------------------------------------------------
 static inline void DAP_CONFIG_DISCONNECT(void)
 {
-  gpio_set_as_input(swclk_gpio.num);
-  gpio_set_as_input(swdio_gpio.num);
+  gpio_set_as_input(&swclk_gpio);
+  gpio_set_as_input(&swdio_gpio);
 }
 
 //-----------------------------------------------------------------------------
 static inline void DAP_CONFIG_CONNECT_SWD(void)
 {
-  gpio_set_as_output(swdio_gpio.num, 1);
-  gpio_set_as_output(swclk_gpio.num, 1);
+  gpio_set_as_output(&swdio_gpio, 1);
+  gpio_set_as_output(&swclk_gpio, 1);
 }
 
 //-----------------------------------------------------------------------------
