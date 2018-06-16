@@ -496,4 +496,3 @@ void dap_target_prepare(void)
   dap_write_reg(SWD_DP_W_CTRL_STAT, 0x50000f00);
   dap_write_reg(SWD_AP_CSW, 0x23000052);
 }
-

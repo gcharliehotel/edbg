@@ -48,9 +48,9 @@
 #include "dbg.h"
 
 /*- Definitions -------------------------------------------------------------*/
-#define VERSION           "v0.7"
+#define VERSION           "v0.7-sysfs"
 
-#define MAX_DEBUGGERS     20
+//#define MAX_DEBUGGERS     20
 
 #ifndef O_BINARY
 #define O_BINARY 0
@@ -71,7 +71,8 @@ static const struct option long_options[] =
   { "file",      required_argument,  0, 'f' },
   { "target",    required_argument,  0, 't' },
   { "list",      no_argument,        0, 'l' },
-  { "serial",    required_argument,  0, 's' },
+  { "swdio",     required_argument,  0, 's' },
+  { "swclk",     required_argument,  0, 'S' },
   { "clock",     required_argument,  0, 'c' },
   { "offset",    required_argument,  0, 'o' },
   { "size",      required_argument,  0, 'z' },
@@ -79,10 +80,12 @@ static const struct option long_options[] =
   { 0, 0, 0, 0 }
 };
 
-static const char *short_options = "hbepvkrf:t:ls:c:o:z:F:";
+static const char *short_options = "hbepvkrf:t:ls:S:c:o:z:F:";
 
-static char *g_serial = NULL;
-static bool g_list = false;
+//static char *g_serial = NULL;
+//static bool g_list = false;
+static int g_swdio_gpio_num = -1;
+static int g_swclk_gpio_num = -1;
 static char *g_target = NULL;
 static bool g_verbose = false;
 static long g_clock = 16000000;
@@ -374,7 +377,8 @@ static void print_help(char *name, char *param)
     printf("  -f, --file <file>          binary file to be programmed or verified; also read output file name\n");
     printf("  -t, --target <name>        specify a target type (use '-t list' for a list of supported target types)\n");
     printf("  -l, --list                 list all available debuggers\n");
-    printf("  -s, --serial <number>      use a debugger with a specified serial number\n");
+    printf("  -s, --swdio <number>       gpio number for SWDIO\n");
+    printf("  -S, --swclk <number>       gpio number for SWCLK\n");
     printf("  -c, --clock <freq>         interface clock frequency in kHz (default 16000)\n");
     printf("  -o, --offset <offset>      offset for the operation\n");
     printf("  -z, --size <size>          size for the operation\n");
@@ -483,8 +487,9 @@ static void parse_command_line(int argc, char **argv)
       case 'r': g_target_options.read = true; break;
       case 'f': g_target_options.name = optarg; break;
       case 't': g_target = optarg; break;
-      case 'l': g_list = true; break;
-      case 's': g_serial = optarg; break;
+      //case 'l': g_list = true; break;
+      case 's': g_swdio_gpio_num = strtoul(optarg, NULL, 0); break;
+      case 'S': g_swclk_gpio_num = strtoul(optarg, NULL, 0); break;
       case 'c': g_clock = strtoul(optarg, NULL, 0) * 1000; break;
       case 'b': g_verbose = true; break;
       case 'o': g_target_options.offset = (uint32_t)strtoul(optarg, NULL, 0); break;
@@ -500,22 +505,23 @@ static void parse_command_line(int argc, char **argv)
 //-----------------------------------------------------------------------------
 int main(int argc, char **argv)
 {
-  debugger_t debuggers[MAX_DEBUGGERS];
-  int n_debuggers = 0;
-  int debugger = -1;
+  //debugger_t debuggers[MAX_DEBUGGERS];
+  //int n_debuggers = 0;
+  //int debugger = -1;
   target_t *target;
 
   parse_command_line(argc, argv);
 
   if (!(g_target_options.erase || g_target_options.program || g_target_options.verify ||
       g_target_options.lock || g_target_options.read || g_target_options.fuse ||
-      g_list || g_target))
+        g_target))
     error_exit("no actions specified");
 
   if (g_target_options.read && (g_target_options.erase || g_target_options.program ||
       g_target_options.verify || g_target_options.lock))
     error_exit("mutually exclusive actions specified");
 
+#if 0
   n_debuggers = dbg_enumerate(debuggers, MAX_DEBUGGERS);
 
   if (g_list)
@@ -525,6 +531,7 @@ int main(int argc, char **argv)
       printf("  %s - %s %s\n", debuggers[i].serial, debuggers[i].manufacturer, debuggers[i].product);
     return 0;
   }
+#endif
 
   if (NULL == g_target)
     error_exit("no target type specified (use '-t' option)");
@@ -537,6 +544,7 @@ int main(int argc, char **argv)
 
   target = target_get_ops(g_target);
 
+#if 0
   if (g_serial)
   {
     for (int i = 0; i < n_debuggers; i++)
@@ -558,8 +566,14 @@ int main(int argc, char **argv)
     debugger = 0;
   else if (n_debuggers > 1 && -1 == debugger)
     error_exit("more than one debugger found, please specify a serial number");
+#endif
 
-  dbg_open(&debuggers[debugger]);
+  if (g_swdio_gpio_num < 0)
+    error_exit("No GPIO specificed for SWDIO");
+  if (g_swclk_gpio_num < 0)
+    error_exit("No GPIO specificed for SWCLK");
+
+  dbg_open(g_swdio_gpio_num, g_swclk_gpio_num);
 
   dap_reset_target_hw(0);
 
