@@ -80,18 +80,21 @@ void gpio_set_path(char *buf, size_t size, int num, char *attribute) {
 }
 
 void gpio_set_as_output(int num, int initial_value) {
+  verbose("setting %d as output to %d", num, initial_value);
   char path[PATH_MAX];
   gpio_set_path(path, sizeof(path), num, "direction");
   save_file2(path, initial_value ? "high" : "low");
 }
 
 void gpio_set_as_input(int num) {
+  verbose("setting %d as input");
   char path[PATH_MAX];
   gpio_set_path(path, sizeof(path), num, "direction");
   save_file2(path, "in");
 }
 
 void gpio_set_pullup(int num) {
+  verbose("setting %d as pullup");
   // This might not work.
   gpio_set_as_output(num, 1);
 }
