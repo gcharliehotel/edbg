@@ -64,13 +64,13 @@ void save_file2(char *path, char *buf) {
 void gpio_export(int num) {
   char buf[100];
   snprintf(buf, sizeof(buf), "%d", num);
-  save_file2("/sys/glass/gpio/export", buf);
+  save_file2("/sys/class/gpio/export", buf);
 }
 
 void gpio_unexport(int num) {
   char buf[100];
   snprintf(buf, sizeof(buf), "%d", num);
-  save_file2("/sys/glass/gpio/unexport", buf);
+  save_file2("/sys/class/gpio/unexport", buf);
 }
 
 void gpio_set_path(char *buf, size_t size, int num, char *attribute) {
