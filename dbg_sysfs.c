@@ -38,10 +38,6 @@
 #include <sys/ioctl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <linux/types.h>
-#include <linux/input.h>
-#include <linux/hidraw.h>
-#include <libudev.h>
 #include "edbg.h"
 #include "dbg.h"
 
