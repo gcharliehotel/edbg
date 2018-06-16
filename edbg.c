@@ -70,7 +70,6 @@ static const struct option long_options[] =
   { "read",      no_argument,        0, 'r' },
   { "file",      required_argument,  0, 'f' },
   { "target",    required_argument,  0, 't' },
-  { "list",      no_argument,        0, 'l' },
   { "swdio",     required_argument,  0, 's' },
   { "swclk",     required_argument,  0, 'S' },
   { "clock",     required_argument,  0, 'c' },
@@ -80,7 +79,7 @@ static const struct option long_options[] =
   { 0, 0, 0, 0 }
 };
 
-static const char *short_options = "hbepvkrf:t:ls:S:c:o:z:F:";
+static const char *short_options = "hbepvkrf:t:s:S:c:o:z:F:";
 
 //static char *g_serial = NULL;
 //static bool g_list = false;
@@ -376,7 +375,6 @@ static void print_help(char *name, char *param)
     printf("  -r, --read                 read the whole content of the chip flash\n");
     printf("  -f, --file <file>          binary file to be programmed or verified; also read output file name\n");
     printf("  -t, --target <name>        specify a target type (use '-t list' for a list of supported target types)\n");
-    printf("  -l, --list                 list all available debuggers\n");
     printf("  -s, --swdio <number>       gpio number for SWDIO\n");
     printf("  -S, --swclk <number>       gpio number for SWCLK\n");
     printf("  -c, --clock <freq>         interface clock frequency in kHz (default 16000)\n");
