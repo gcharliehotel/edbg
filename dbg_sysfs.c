@@ -149,7 +149,7 @@ void gpio_write(gpio_t *gpio, int value) {
   char cc = value ? '1' : '0';
   int n = write(gpio->fd, &cc, 1);
   if (n != 1)
-    perror_exit("write");
+    warning("failed to set gpio %d (fd=%d) to %d\n", gpio->num, gpio->fd, value);
 }
 
 //-----------------------------------------------------------------------------
