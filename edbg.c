@@ -506,6 +506,8 @@ int main(int argc, char **argv)
   //debugger_t debuggers[MAX_DEBUGGERS];
   //int n_debuggers = 0;
   //int debugger = -1;
+  message("edbg");
+
   target_t *target;
 
   parse_command_line(argc, argv);
