@@ -61,6 +61,7 @@ void save_file2(char *path, char *buf) {
   save_file(path, (uint8_t *)buf, strlen(buf));
 }
 
+#if 0
 void gpio_export(int num) {
   char buf[100];
   snprintf(buf, sizeof(buf), "%d", num);
@@ -72,6 +73,7 @@ void gpio_unexport(int num) {
   snprintf(buf, sizeof(buf), "%d", num);
   save_file2("/sys/class/gpio/unexport", buf);
 }
+#endif
 
 void gpio_set_path(char *buf, size_t size, int num, char *attribute) {
   snprintf(buf, size, "/sys/class/gpio/gpio%d/%s", num, attribute);
@@ -137,11 +139,11 @@ void dbg_open(int swdio_gpio_num, int swclk_gpio_num)
   swdio_gpio.num = swdio_gpio_num;
   swclk_gpio.num = swclk_gpio_num;
 
-  gpio_export(swdio_gpio.num);
+  //gpio_export(swdio_gpio.num);
   gpio_set_as_input(swdio_gpio.num);
   swdio_gpio.fd = gpio_open(swdio_gpio.num);
 
-  gpio_export(swclk_gpio.num);
+  //gpio_export(swclk_gpio.num);
   gpio_set_as_output(swclk_gpio.num, 0);
   swclk_gpio.fd = gpio_open(swclk_gpio.num);
 }
