@@ -72,6 +72,7 @@ static const struct option long_options[] =
   { "target",    required_argument,  0, 't' },
   { "swdio",     required_argument,  0, 's' },
   { "swclk",     required_argument,  0, 'S' },
+  { "nreset",    required_argument,  0, 'n' },
   { "clock",     required_argument,  0, 'c' },
   { "offset",    required_argument,  0, 'o' },
   { "size",      required_argument,  0, 'z' },
@@ -79,12 +80,13 @@ static const struct option long_options[] =
   { 0, 0, 0, 0 }
 };
 
-static const char *short_options = "hbepvkrf:t:s:S:c:o:z:F:";
+static const char *short_options = "hbepvkrf:t:s:S:n:c:o:z:F:";
 
 //static char *g_serial = NULL;
 //static bool g_list = false;
 static int g_swdio_gpio_num = -1;
 static int g_swclk_gpio_num = -1;
+static int g_nreset_gpio_num = -1;
 static char *g_target = NULL;
 static bool g_verbose = false;
 static long g_clock = 16000000;
@@ -377,6 +379,7 @@ static void print_help(char *name, char *param)
     printf("  -t, --target <name>        specify a target type (use '-t list' for a list of supported target types)\n");
     printf("  -s, --swdio <number>       gpio number for SWDIO\n");
     printf("  -S, --swclk <number>       gpio number for SWCLK\n");
+    printf("  -n, --nreset <number>      gpio number for nRESET\n");
     printf("  -c, --clock <freq>         interface clock frequency in kHz (default 16000)\n");
     printf("  -o, --offset <offset>      offset for the operation\n");
     printf("  -z, --size <size>          size for the operation\n");
@@ -488,6 +491,7 @@ static void parse_command_line(int argc, char **argv)
       //case 'l': g_list = true; break;
       case 's': g_swdio_gpio_num = strtoul(optarg, NULL, 0); break;
       case 'S': g_swclk_gpio_num = strtoul(optarg, NULL, 0); break;
+      case 'n': g_nreset_gpio_num =  strtoul(optarg, NULL, 0); break;
       case 'c': g_clock = strtoul(optarg, NULL, 0) * 1000; break;
       case 'b': g_verbose = true; break;
       case 'o': g_target_options.offset = (uint32_t)strtoul(optarg, NULL, 0); break;
@@ -573,7 +577,7 @@ int main(int argc, char **argv)
   if (g_swclk_gpio_num < 0)
     error_exit("No GPIO specificed for SWCLK");
 
-  dbg_open(g_swdio_gpio_num, g_swclk_gpio_num);
+  dbg_open(g_swdio_gpio_num, g_swclk_gpio_num, g_nreset_gpio_num);
 
   dap_reset_target_hw(0);
 

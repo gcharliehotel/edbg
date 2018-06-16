@@ -51,7 +51,7 @@ typedef struct
 
 /*- Prototypes --------------------------------------------------------------*/
 //int dbg_enumerate(debugger_t *debuggers, int size);
-void dbg_open(int swdio_gpio_num, int swclk_gpio_num);
+void dbg_open(int swdio_gpio_num, int swclk_gpio_num, int nreset_gpio_num);
 void dbg_close(void);
 int dbg_get_report_size(void);
 int dbg_dap_cmd(uint8_t *data, int size, int rsize);

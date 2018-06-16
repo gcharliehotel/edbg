@@ -51,6 +51,7 @@ typedef struct
 /*- Variables ---------------------------------------------------------------*/
 static gpio_t gpio_swdio = {-1, -1};
 static gpio_t gpio_swclk  = {-1, -1};
+static gpio_t gpio_nreset  = {-1, -1};
 static uint8_t req_buffer[1024];
 static uint8_t res_buffer[1024];
 static int report_size = sizeof(res_buffer); // must be same as above.
@@ -153,13 +154,15 @@ void gpio_write(gpio_t *gpio, int value) {
 }
 
 //-----------------------------------------------------------------------------
-void dbg_open(int swdio_gpio_num, int swclk_gpio_num)
+void dbg_open(int swdio_gpio_num, int swclk_gpio_num, int nreset_gpio_num)
 {
   verbose("dbg_open\n");
   gpio_swdio.num = swdio_gpio_num;
   gpio_swclk.num = swclk_gpio_num;
+  gpio_nreset.num = nreset_gpio_num;
   gpio_open(&gpio_swdio);
   gpio_open(&gpio_swclk);
+  gpio_open(&gpio_nreset);
   dap_init();
 }
 
@@ -169,6 +172,7 @@ void dbg_close(void)
   verbose("dbg_close\n");
   gpio_close(&gpio_swdio);
   gpio_close(&gpio_swclk);
+  gpio_close(&gpio_nreset);
 }
 
 //-----------------------------------------------------------------------------
@@ -355,7 +359,7 @@ static inline void HAL_GPIO_SWCLK_TCK_in(void) {
 
 static inline void HAL_GPIO_SWCLK_TCK_out(void) {
   verbose("%s\n", __FUNCTION__);
-  gpio_set_as_output(&gpio_swclk, 0);
+  gpio_set_as_output(&gpio_swclk, 1);
 }
 
 static inline void HAL_GPIO_SWCLK_TCK_pullup(void) {
@@ -393,7 +397,7 @@ static inline void HAL_GPIO_SWDIO_TMS_in(void) {
 
 static inline void HAL_GPIO_SWDIO_TMS_out(void) {
   verbose("%s\n", __FUNCTION__);
-  gpio_set_as_output(&gpio_swdio, 0);
+  gpio_set_as_output(&gpio_swdio, 1);
 }
 
 static inline void HAL_GPIO_SWDIO_TMS_pullup(void) {
@@ -404,33 +408,39 @@ static inline void HAL_GPIO_SWDIO_TMS_pullup(void) {
 //
 
 static inline void HAL_GPIO_nRESET_set(void) {
-  warning("NI %s\n", __FUNCTION__);
+  verbose("%s\n", __FUNCTION__);
+  gpio_write(&gpio_nreset, 1);
 }
 
 static inline void HAL_GPIO_nRESET_clr(void) {
-  warning("NI %s\n", __FUNCTION__);
+  verbose("%s\n", __FUNCTION__);
+  gpio_write(&gpio_nreset, 0);
 }
 
 static inline void HAL_GPIO_nRESET_write(int value) {
-  (void) value;
-  warning("NI %s\n", __FUNCTION__);
+  verbose("%s %d\n", __FUNCTION__, value);
+  gpio_write(&gpio_nreset, !!value);
 }
 
 static inline int HAL_GPIO_nRESET_read(void) {
-  warning("NI %s\n", __FUNCTION__);
-  return 0;
+  int n = gpio_read(&gpio_nreset);
+  verbose("%s => %d\n", __FUNCTION__, n);
+  return n;
 }
 
 static inline void HAL_GPIO_nRESET_in(void) {
-  warning("NI %s\n", __FUNCTION__);
+  verbose("%s\n", __FUNCTION__);
+  gpio_set_as_input(&gpio_nreset);
 }
 
 static inline void HAL_GPIO_nRESET_out(void) {
-  warning("NI %s\n", __FUNCTION__);
+  verbose("%s\n", __FUNCTION__);
+  gpio_set_as_output(&gpio_nreset, 1);
 }
 
 static inline void HAL_GPIO_nRESET_pullup(void) {
   warning("NI %s\n", __FUNCTION__);
+  gpio_set_pullup(&gpio_nreset);
 }
 
 //-----------------------------------------------------------------------------
@@ -1022,12 +1032,13 @@ static void dap_info(uint8_t *req, uint8_t *resp)
   {
     if (dap_info_strings[index])
     {
-      verbose(".dab_info[%d]=%s\n", index, dap_info_strings[index]);
+      verbose(".dap_info[%d]=%s\n", index, dap_info_strings[index]);
       resp[0] = strlen(dap_info_strings[index]) + 1;
       strcpy((char *)&resp[1], dap_info_strings[index]);
     }
     else
     {
+      verbose(".dap_info[%d]=NULL\n", index);
       resp[0] = 0;
     }
   }
@@ -1477,6 +1488,16 @@ void dap_clock_test(int delay)
 }
 
 //-----------------------------------------------------------------------------
+void hexdump(uint8_t *data, int n) {
+  for(int i = 0; i < n; i += 16) {
+    printf("%04X:", i);
+    for (int j = 0; j < 16 && i + j < n; ++j) {
+      printf(" %02X ", data[i + j]);
+    }
+    printf("\n");
+  }
+}
+//-----------------------------------------------------------------------------
 int dbg_dap_cmd(uint8_t *data, int size, int rsize)
 {
 #if 0
@@ -1502,10 +1523,17 @@ int dbg_dap_cmd(uint8_t *data, int size, int rsize)
 
   return res;
 #endif
+  char cmd = data[0];
+  verbose("size=%d, rsize=%d\n", size, rsize);
   memset(req_buffer, 0xff, sizeof(req_buffer));
   memset(res_buffer, 0xff, sizeof(res_buffer));
   memcpy(req_buffer, data, rsize);
+  //printf("req_buffer, rsize=%d:\n", rsize);
+  //hexdump(req_buffer, sizeof(req_buffer));
   dap_process_request(req_buffer, res_buffer);
-  memcpy(data, res_buffer, size);
+  //printf("res_buffer, size=%d:\n", size);
+  //hexdump(res_buffer, sizeof(res_buffer));
+  check(res_buffer[0] == cmd, "invalid rsponse received");
+  memcpy(data, &res_buffer[1], size);
   return 0;
 }
