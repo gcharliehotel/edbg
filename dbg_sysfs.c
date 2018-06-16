@@ -331,12 +331,14 @@ static bool dap_swd_data_phase;
 
 static inline void DAP_CONFIG_SWCLK_TCK_write(int value)
 {
+  //HAL_GPIO_SWCLK_TCK_write(value);
   gpio_set(&swclk_gpio, value);
 }
 
 //-----------------------------------------------------------------------------
 static inline void DAP_CONFIG_SWDIO_TMS_write(int value)
 {
+  //HAL_GPIO_SWDIO_TMS_write(value);
   gpio_set(&swdio_gpio, value);
 }
 
@@ -363,12 +365,14 @@ static inline void DAP_CONFIG_nRESET_write(int value)
 //-----------------------------------------------------------------------------
 static inline int DAP_CONFIG_SWCLK_TCK_read(void)
 {
+  //return HAL_GPIO_SWCLK_TCK_read();
   return gpio_read(&swclk_gpio);
 }
 
 //-----------------------------------------------------------------------------
 static inline int DAP_CONFIG_SWDIO_TMS_read(void)
 {
+  //return HAL_GPIO_SWDIO_TMS_read();
   return gpio_read(&swdio_gpio);
 }
 
@@ -401,47 +405,63 @@ static inline int DAP_CONFIG_nRESET_read(void)
 //-----------------------------------------------------------------------------
 static inline void DAP_CONFIG_SWCLK_TCK_set(void)
 {
+  //HAL_GPIO_SWCLK_TCK_set();
   DAP_CONFIG_SWCLK_TCK_write(1);
 }
 
 //-----------------------------------------------------------------------------
 static inline void DAP_CONFIG_SWCLK_TCK_clr(void)
 {
+  //HAL_GPIO_SWCLK_TCK_clr();
   DAP_CONFIG_SWCLK_TCK_write(0);
 }
 
 //-----------------------------------------------------------------------------
 static inline void DAP_CONFIG_SWDIO_TMS_in(void)
 {
+  //HAL_GPIO_SWDIO_TMS_in();
   gpio_set_as_input(&swdio_gpio);
 }
 
 //-----------------------------------------------------------------------------
 static inline void DAP_CONFIG_SWDIO_TMS_out(void)
 {
+  //HAL_GPIO_SWDIO_TMS_out();
   gpio_set_as_output(&swdio_gpio, 0);
 }
 
 //-----------------------------------------------------------------------------
 static inline void DAP_CONFIG_SETUP(void)
 {
+  //HAL_GPIO_SWCLK_TCK_in();
   gpio_set_as_input(&swclk_gpio);
+
+  //HAL_GPIO_SWDIO_TMS_in();
   gpio_set_as_input(&swdio_gpio);
+
+  //HAL_GPIO_nRESET_in();
+
+  //HAL_GPIO_SWDIO_TMS_pullup();
   gpio_set_pullup(&swclk_gpio);
 }
 
 //-----------------------------------------------------------------------------
 static inline void DAP_CONFIG_DISCONNECT(void)
 {
+  //HAL_GPIO_SWCLK_TCK_in();
   gpio_set_as_input(&swclk_gpio);
+  //HAL_GPIO_SWDIO_TMS_in();
   gpio_set_as_input(&swdio_gpio);
+  //HAL_GPIO_nRESET_in();
 }
 
 //-----------------------------------------------------------------------------
 static inline void DAP_CONFIG_CONNECT_SWD(void)
 {
+  //HAL_GPIO_SWDIO_TMS_out();
   gpio_set_as_output(&swdio_gpio, 1);
-  gpio_set_as_output(&swclk_gpio, 1);
+  //HAL_GPIO_SWDIO_TMS_set();
+  gpio_set(&swdio_gpio, 1);
 }
 
 //-----------------------------------------------------------------------------
