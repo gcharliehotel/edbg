@@ -143,6 +143,7 @@ void gpio_set(int fd, int value) {
 //-----------------------------------------------------------------------------
 void dbg_open(int swdio_gpio_num, int swclk_gpio_num)
 {
+  verbose("dbg_open");
   swdio_gpio.num = swdio_gpio_num;
   swclk_gpio.num = swclk_gpio_num;
 
@@ -158,6 +159,7 @@ void dbg_open(int swdio_gpio_num, int swclk_gpio_num)
 //-----------------------------------------------------------------------------
 void dbg_close(void)
 {
+  verbose("dbg_close");
   if (swdio_gpio.fd >= 0) {
     close(swdio_gpio.fd);
     swdio_gpio.fd = -1;
