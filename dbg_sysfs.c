@@ -80,28 +80,27 @@ void gpio_set_path(gpio_t *gpio, char *buf, size_t size, char *attribute) {
 }
 
 void gpio_set_as_output(gpio_t *gpio, int initial_value) {
-  verbose("setting %d as output to %d\n", gpio->num, initial_value);
+  verbose("setting gpio %d as output to %d\n", gpio->num, initial_value);
   char path[PATH_MAX];
   gpio_set_path(gpio, path, sizeof(path), "direction");
   save_file2(path, initial_value ? "high" : "low");
 }
 
 void gpio_set_as_input(gpio_t *gpio) {
-  verbose("setting %d as input\n", gpio->num);
+  verbose("setting gpio %d as input\n", gpio->num);
   char path[PATH_MAX];
   gpio_set_path(gpio, path, sizeof(path), "direction");
   save_file2(path, "in");
 }
 
 void gpio_set_pullup(gpio_t *gpio) {
-  verbose("setting %d as pullup\n", gpio->num);
+  verbose("setting gpio %d as pullup\n", gpio->num);
   // This might not work.
   gpio_set_as_output(gpio, 1);
 }
 
-
 void gpio_open(gpio_t *gpio) {
-  check(gpio->fd == -1, "reopening gpio?\n");
+  check(gpio->fd == -1, "attemp to repon gpio?\n");
   char path[PATH_MAX];
   gpio_set_path(gpio, path, sizeof(path), "value");
   int fd = open(path, O_RDWR);
@@ -109,6 +108,13 @@ void gpio_open(gpio_t *gpio) {
   if (fd < 0)
     perror_exit("open()");
   gpio->fd = fd;
+}
+
+void gpio_close(gpio_t *gpio) {
+  if (gpio->fd >= 0) {
+    close(gpio->fd);
+    gpio->fd = -1;
+  }
 }
 
 int gpio_read(gpio_t *gpio) {
@@ -149,6 +155,9 @@ void dbg_open(int swdio_gpio_num, int swclk_gpio_num)
   swdio_gpio.num = swdio_gpio_num;
   swclk_gpio.num = swclk_gpio_num;
 
+  check(swdio_gpio.fd == -1, "already open");
+  check(swclk_gpio.fd == -1, "already open");
+
   //gpio_export(swdio_gpio);
   gpio_set_as_input(&swdio_gpio);
   gpio_open(&swdio_gpio);
@@ -162,14 +171,8 @@ void dbg_open(int swdio_gpio_num, int swclk_gpio_num)
 void dbg_close(void)
 {
   verbose("dbg_close\n");
-  if (swdio_gpio.fd >= 0) {
-    close(swdio_gpio.fd);
-    swdio_gpio.fd = -1;
-  }
-  if (swclk_gpio.fd >= 0) {
-    close(swclk_gpio.fd);
-    swclk_gpio.fd = -1;
-  }
+  gpio_close(&swdio_gpio);
+  gpio_close(&swclk_gpio);
 }
 
 //-----------------------------------------------------------------------------

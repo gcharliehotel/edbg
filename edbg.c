@@ -573,7 +573,6 @@ int main(int argc, char **argv)
   if (g_swclk_gpio_num < 0)
     error_exit("No GPIO specificed for SWCLK");
 
-  verbose("dbg_open\n");
   dbg_open(g_swdio_gpio_num, g_swclk_gpio_num);
 
   dap_reset_target_hw(0);
