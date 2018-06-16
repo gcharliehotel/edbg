@@ -49,11 +49,15 @@ typedef struct
 } gpio_t;
 
 /*- Variables ---------------------------------------------------------------*/
-static gpio_t swdio_gpio = {-1, -1};
-static gpio_t swclk_gpio = {-1, -1};
+static gpio_t gpio_swdio = {-1, -1};
+static gpio_t gpio_swclk  = {-1, -1};
 static uint8_t req_buffer[1024];
 static uint8_t res_buffer[1024];
 static int report_size = sizeof(res_buffer); // must be same as above.
+
+/*- Forward */
+
+void dap_init(void);
 
 /*- Implementations ---------------------------------------------------------*/
 
@@ -137,7 +141,7 @@ int gpio_read(gpio_t *gpio) {
   }
 }
 
-void gpio_set(gpio_t *gpio, int value) {
+void gpio_write(gpio_t *gpio, int value) {
   verbose("setting gpio %d (fd=%d) to %d\n", gpio->num, gpio->fd, value);
   check(gpio->fd >= 0, "gpio_set: fd < 0");
   if (lseek(gpio->fd, 0, SEEK_SET) < 0)
@@ -152,27 +156,19 @@ void gpio_set(gpio_t *gpio, int value) {
 void dbg_open(int swdio_gpio_num, int swclk_gpio_num)
 {
   verbose("dbg_open\n");
-  swdio_gpio.num = swdio_gpio_num;
-  swclk_gpio.num = swclk_gpio_num;
-
-  check(swdio_gpio.fd == -1, "already open");
-  check(swclk_gpio.fd == -1, "already open");
-
-  //gpio_export(swdio_gpio);
-  gpio_set_as_input(&swdio_gpio);
-  gpio_open(&swdio_gpio);
-
-  //gpio_export(swclk_gpio);
-  gpio_set_as_output(&swclk_gpio, 0);
-  gpio_open(&swclk_gpio);
+  gpio_swdio.num = swdio_gpio_num;
+  gpio_swclk.num = swclk_gpio_num;
+  gpio_open(&gpio_swdio);
+  gpio_open(&gpio_swclk);
+  dap_init();
 }
 
 //-----------------------------------------------------------------------------
 void dbg_close(void)
 {
   verbose("dbg_close\n");
-  gpio_close(&swdio_gpio);
-  gpio_close(&swclk_gpio);
+  gpio_close(&gpio_swdio);
+  gpio_close(&gpio_swclk);
 }
 
 //-----------------------------------------------------------------------------
@@ -180,7 +176,6 @@ int dbg_get_report_size(void)
 {
   return report_size;
 }
-
 
 //-----------------------------------------------------------------------------
 
@@ -332,20 +327,124 @@ static bool dap_swd_data_phase;
 
 /*- Implementations ---------------------------------------------------------*/
 
+static inline void HAL_GPIO_SWCLK_TCK_set(void) {
+  verbose("%s\n", __FUNCTION__);
+  gpio_write(&gpio_swclk, 1);
+}
+
+static inline void HAL_GPIO_SWCLK_TCK_clr(void) {
+  verbose("%s\n", __FUNCTION__);
+  gpio_write(&gpio_swclk, 0);
+}
+
+static inline void HAL_GPIO_SWCLK_TCK_write(int value) {
+  verbose("%s %d\n", __FUNCTION__, value);
+  gpio_write(&gpio_swclk, !!value);
+}
+
+static inline int HAL_GPIO_SWCLK_TCK_read() {
+  int n = gpio_read(&gpio_swclk);
+  verbose("%s => %d\n", __FUNCTION__, n);
+  return n;
+}
+
+static inline void HAL_GPIO_SWCLK_TCK_in(void) {
+  verbose("%s\n", __FUNCTION__);
+  gpio_set_as_input(&gpio_swclk);
+}
+
+static inline void HAL_GPIO_SWCLK_TCK_out(void) {
+  verbose("%s\n", __FUNCTION__);
+  gpio_set_as_output(&gpio_swclk, 0);
+}
+
+static inline void HAL_GPIO_SWCLK_TCK_pullup(void) {
+  verbose("%s\n", __FUNCTION__);
+  gpio_set_pullup(&gpio_swclk);
+}
+
+//
+
+static inline void HAL_GPIO_SWDIO_TMS_set(void) {
+  verbose("%s\n", __FUNCTION__);
+  gpio_write(&gpio_swdio, 1);
+}
+
+static inline void HAL_GPIO_SWDIO_TMS_clr(void) {
+  verbose("%s\n", __FUNCTION__);
+  gpio_write(&gpio_swdio, 0);
+}
+
+static inline void HAL_GPIO_SWDIO_TMS_write(int value) {
+  verbose("%s %d\n", __FUNCTION__, value);
+  gpio_write(&gpio_swdio, !!value);
+}
+
+static inline int HAL_GPIO_SWDIO_TMS_read() {
+  int n = gpio_read(&gpio_swdio);
+  verbose("%s => %d\n", __FUNCTION__, n);
+  return n;
+}
+
+static inline void HAL_GPIO_SWDIO_TMS_in(void) {
+  verbose("%s\n", __FUNCTION__);
+  gpio_set_as_input(&gpio_swdio);
+}
+
+static inline void HAL_GPIO_SWDIO_TMS_out(void) {
+  verbose("%s\n", __FUNCTION__);
+  gpio_set_as_output(&gpio_swdio, 0);
+}
+
+static inline void HAL_GPIO_SWDIO_TMS_pullup(void) {
+  verbose("%s\n", __FUNCTION__);
+  gpio_set_pullup(&gpio_swdio);
+}
+
+//
+
+static inline void HAL_GPIO_nRESET_set(void) {
+  warning("NI %s\n", __FUNCTION__);
+}
+
+static inline void HAL_GPIO_nRESET_clr(void) {
+  warning("NI %s\n", __FUNCTION__);
+}
+
+static inline void HAL_GPIO_nRESET_write(int value) {
+  (void) value;
+  warning("NI %s\n", __FUNCTION__);
+}
+
+static inline int HAL_GPIO_nRESET_read(void) {
+  warning("NI %s\n", __FUNCTION__);
+  return 0;
+}
+
+static inline void HAL_GPIO_nRESET_in(void) {
+  warning("NI %s\n", __FUNCTION__);
+}
+
+static inline void HAL_GPIO_nRESET_out(void) {
+  warning("NI %s\n", __FUNCTION__);
+}
+
+static inline void HAL_GPIO_nRESET_pullup(void) {
+  warning("NI %s\n", __FUNCTION__);
+}
+
+//-----------------------------------------------------------------------------
 static inline void DAP_CONFIG_SWCLK_TCK_write(int value)
 {
-  //HAL_GPIO_SWCLK_TCK_write(value);
-  gpio_set(&swclk_gpio, value);
+  HAL_GPIO_SWCLK_TCK_write(value);
 }
 
 //-----------------------------------------------------------------------------
 static inline void DAP_CONFIG_SWDIO_TMS_write(int value)
 {
-  //HAL_GPIO_SWDIO_TMS_write(value);
-  gpio_set(&swdio_gpio, value);
+  HAL_GPIO_SWDIO_TMS_write(value);
 }
 
-#if 0
 //-----------------------------------------------------------------------------
 static inline void DAP_CONFIG_TDO_write(int value)
 {
@@ -363,23 +462,19 @@ static inline void DAP_CONFIG_nRESET_write(int value)
 {
   HAL_GPIO_nRESET_write(value);
 }
-#endif
 
 //-----------------------------------------------------------------------------
 static inline int DAP_CONFIG_SWCLK_TCK_read(void)
 {
-  //return HAL_GPIO_SWCLK_TCK_read();
-  return gpio_read(&swclk_gpio);
+  return HAL_GPIO_SWCLK_TCK_read();
 }
 
 //-----------------------------------------------------------------------------
 static inline int DAP_CONFIG_SWDIO_TMS_read(void)
 {
-  //return HAL_GPIO_SWDIO_TMS_read();
-  return gpio_read(&swdio_gpio);
+  return HAL_GPIO_SWDIO_TMS_read();
 }
 
-#if 0
 //-----------------------------------------------------------------------------
 static inline int DAP_CONFIG_TDI_read(void)
 {
@@ -403,72 +498,63 @@ static inline int DAP_CONFIG_nRESET_read(void)
 {
   return HAL_GPIO_nRESET_read();
 }
-#endif
 
 //-----------------------------------------------------------------------------
 static inline void DAP_CONFIG_SWCLK_TCK_set(void)
 {
-  //HAL_GPIO_SWCLK_TCK_set();
-  DAP_CONFIG_SWCLK_TCK_write(1);
+  HAL_GPIO_SWCLK_TCK_set();
 }
 
 //-----------------------------------------------------------------------------
 static inline void DAP_CONFIG_SWCLK_TCK_clr(void)
 {
-  //HAL_GPIO_SWCLK_TCK_clr();
-  DAP_CONFIG_SWCLK_TCK_write(0);
+  HAL_GPIO_SWCLK_TCK_clr();
 }
 
 //-----------------------------------------------------------------------------
 static inline void DAP_CONFIG_SWDIO_TMS_in(void)
 {
-  //HAL_GPIO_SWDIO_TMS_in();
-  gpio_set_as_input(&swdio_gpio);
+  HAL_GPIO_SWDIO_TMS_in();
 }
 
 //-----------------------------------------------------------------------------
 static inline void DAP_CONFIG_SWDIO_TMS_out(void)
 {
-  //HAL_GPIO_SWDIO_TMS_out();
-  gpio_set_as_output(&swdio_gpio, 0);
+  HAL_GPIO_SWDIO_TMS_out();
 }
 
 //-----------------------------------------------------------------------------
 static inline void DAP_CONFIG_SETUP(void)
 {
-  //HAL_GPIO_SWCLK_TCK_in();
-  gpio_set_as_input(&swclk_gpio);
+  HAL_GPIO_SWCLK_TCK_in();
+  HAL_GPIO_SWDIO_TMS_in();
+  HAL_GPIO_nRESET_in();
 
-  //HAL_GPIO_SWDIO_TMS_in();
-  gpio_set_as_input(&swdio_gpio);
-
-  //HAL_GPIO_nRESET_in();
-
-  //HAL_GPIO_SWDIO_TMS_pullup();
-  gpio_set_pullup(&swclk_gpio);
+  HAL_GPIO_SWDIO_TMS_pullup();
 }
 
 //-----------------------------------------------------------------------------
 static inline void DAP_CONFIG_DISCONNECT(void)
 {
-  //HAL_GPIO_SWCLK_TCK_in();
-  gpio_set_as_input(&swclk_gpio);
-  //HAL_GPIO_SWDIO_TMS_in();
-  gpio_set_as_input(&swdio_gpio);
-  //HAL_GPIO_nRESET_in();
+  HAL_GPIO_SWCLK_TCK_in();
+  HAL_GPIO_SWDIO_TMS_in();
+  HAL_GPIO_nRESET_in();
 }
 
 //-----------------------------------------------------------------------------
 static inline void DAP_CONFIG_CONNECT_SWD(void)
 {
-  //HAL_GPIO_SWDIO_TMS_out();
-  gpio_set_as_output(&swdio_gpio, 1);
-  //HAL_GPIO_SWDIO_TMS_set();
-  gpio_set(&swdio_gpio, 1);
+  HAL_GPIO_SWDIO_TMS_out();
+  HAL_GPIO_SWDIO_TMS_set();
+
+  HAL_GPIO_SWCLK_TCK_out();
+  HAL_GPIO_SWCLK_TCK_set();
+
+  HAL_GPIO_nRESET_out();
+  HAL_GPIO_nRESET_set();
 }
 
 //-----------------------------------------------------------------------------
-#if 0
 static inline void DAP_CONFIG_CONNECT_JTAG(void)
 {
   HAL_GPIO_SWDIO_TMS_out();
@@ -480,7 +566,6 @@ static inline void DAP_CONFIG_CONNECT_JTAG(void)
   HAL_GPIO_nRESET_out();
   HAL_GPIO_nRESET_set();
 }
-#endif
 
 //-----------------------------------------------------------------------------
 static inline void DAP_CONFIG_LED(int index, int state)
@@ -929,6 +1014,8 @@ static void dap_swd_transfer_block(uint8_t *req, uint8_t *resp)
 //-----------------------------------------------------------------------------
 static void dap_info(uint8_t *req, uint8_t *resp)
 {
+  verbose("t/%s\n", __FUNCTION__);
+
   int index = req[0];
 
   if (DAP_INFO_VENDOR <= index && index <= DAP_INFO_DEVICE_NAME)
@@ -971,6 +1058,8 @@ static void dap_info(uint8_t *req, uint8_t *resp)
 //-----------------------------------------------------------------------------
 static void dap_led(uint8_t *req, uint8_t *resp)
 {
+  verbose("t/%s\n", __FUNCTION__);
+
   int index = req[0];
   int state = req[1];
 
@@ -982,6 +1071,8 @@ static void dap_led(uint8_t *req, uint8_t *resp)
 //-----------------------------------------------------------------------------
 static void dap_connect(uint8_t *req, uint8_t *resp)
 {
+  verbose("t/%s\n", __FUNCTION__);
+
   int port = req[0];
 
   if (DAP_PORT_AUTODETECT == port)
@@ -1011,6 +1102,8 @@ static void dap_connect(uint8_t *req, uint8_t *resp)
 //-----------------------------------------------------------------------------
 static void dap_disconnect(uint8_t *req, uint8_t *resp)
 {
+  verbose("t/%s\n", __FUNCTION__);
+
   DAP_CONFIG_DISCONNECT();
 
   dap_port = DAP_PORT_DISABLED;
@@ -1023,6 +1116,8 @@ static void dap_disconnect(uint8_t *req, uint8_t *resp)
 //-----------------------------------------------------------------------------
 static void dap_transfer_configure(uint8_t *req, uint8_t *resp)
 {
+  verbose("t/%s\n", __FUNCTION__);
+
   dap_idle_cycles = req[0];
   dap_retry_count = ((int)req[2] << 8) | req[1];
   dap_match_retry_count = ((int)req[4] << 8) | req[3];
@@ -1033,6 +1128,8 @@ static void dap_transfer_configure(uint8_t *req, uint8_t *resp)
 //-----------------------------------------------------------------------------
 static void dap_transfer(uint8_t *req, uint8_t *resp)
 {
+  verbose("t/%s\n", __FUNCTION__);
+
   resp[0] = 0;
   resp[1] = DAP_TRANSFER_INVALID;
 
@@ -1050,6 +1147,8 @@ static void dap_transfer(uint8_t *req, uint8_t *resp)
 //-----------------------------------------------------------------------------
 static void dap_transfer_block(uint8_t *req, uint8_t *resp)
 {
+  verbose("t/%s\n", __FUNCTION__);
+
   resp[0] = 0;
   resp[1] = 0;
   resp[2] = DAP_TRANSFER_INVALID;
@@ -1068,6 +1167,8 @@ static void dap_transfer_block(uint8_t *req, uint8_t *resp)
 //-----------------------------------------------------------------------------
 static void dap_transfer_abort(uint8_t *req, uint8_t *resp)
 {
+  verbose("t/%s\n", __FUNCTION__);
+
   // This request is handled outside of the normal queue
   // TODO: verify entire transfer abort mechanism
   resp[0] = DAP_OK;
@@ -1077,6 +1178,8 @@ static void dap_transfer_abort(uint8_t *req, uint8_t *resp)
 //-----------------------------------------------------------------------------
 static void dap_write_abort(uint8_t *req, uint8_t *resp)
 {
+  verbose("t/%s\n", __FUNCTION__);
+
 #ifdef DAP_CONFIG_ENABLE_SWD
   if (DAP_PORT_SWD == dap_port)
   {
@@ -1103,6 +1206,8 @@ static void dap_write_abort(uint8_t *req, uint8_t *resp)
 //-----------------------------------------------------------------------------
 static void dap_delay(uint8_t *req, uint8_t *resp)
 {
+  verbose("t/%s\n", __FUNCTION__);
+
   int delay;
 
   delay = ((int)req[1] << 8) | req[0];
@@ -1115,6 +1220,8 @@ static void dap_delay(uint8_t *req, uint8_t *resp)
 //-----------------------------------------------------------------------------
 static void dap_reset_target(uint8_t *req, uint8_t *resp)
 {
+  verbose("t/%s\n", __FUNCTION__);
+
   resp[0] = DAP_OK;
 #ifdef DAP_CONFIG_RESET_TARGET_FN
   resp[1] = 1;
@@ -1126,10 +1233,12 @@ static void dap_reset_target(uint8_t *req, uint8_t *resp)
 //-----------------------------------------------------------------------------
 static void dap_swj_pins(uint8_t *req, uint8_t *resp)
 {
+  verbose("t/%s\n", __FUNCTION__);
+
   int value = req[0];
   int select = req[1];
   int wait;
-
+  
   wait = ((int)req[5] << 24) | ((int)req[4] << 16) | ((int)req[3] << 8) | req[2];
 
   if (select & DAP_SWJ_SWCLK_TCK)
@@ -1138,7 +1247,6 @@ static void dap_swj_pins(uint8_t *req, uint8_t *resp)
   if (select & DAP_SWJ_SWDIO_TMS)
     DAP_CONFIG_SWDIO_TMS_write(value & DAP_SWJ_SWDIO_TMS);
 
-#if 0
   if (select & DAP_SWJ_TDI)
     DAP_CONFIG_TDO_write(value & DAP_SWJ_TDI);
 
@@ -1147,20 +1255,16 @@ static void dap_swj_pins(uint8_t *req, uint8_t *resp)
 
   if (select & DAP_SWJ_nRESET)
     DAP_CONFIG_nRESET_write(value & DAP_SWJ_nRESET);
-#endif
 
   dap_delay_us(wait * 1000);
 
   value =
-      ((DAP_CONFIG_SWCLK_TCK_read() ? DAP_SWJ_SWCLK_TCK : 0)
-       | (DAP_CONFIG_SWDIO_TMS_read() ? DAP_SWJ_SWDIO_TMS : 0)
-#if 0
-       | (DAP_CONFIG_TDI_read()       ? DAP_SWJ_TDI       : 0)
-       | (DAP_CONFIG_TDO_read()       ? DAP_SWJ_TDO       : 0)
-       | (DAP_CONFIG_nTRST_read()     ? DAP_SWJ_nTRST     : 0)
-       | (DAP_CONFIG_nRESET_read()    ? DAP_SWJ_nRESET    : 0)
-#endif
-       );
+    (DAP_CONFIG_SWCLK_TCK_read() ? DAP_SWJ_SWCLK_TCK : 0) |
+    (DAP_CONFIG_SWDIO_TMS_read() ? DAP_SWJ_SWDIO_TMS : 0) |
+    (DAP_CONFIG_TDI_read()       ? DAP_SWJ_TDI       : 0) |
+    (DAP_CONFIG_TDO_read()       ? DAP_SWJ_TDO       : 0) |
+    (DAP_CONFIG_nTRST_read()     ? DAP_SWJ_nTRST     : 0) |
+    (DAP_CONFIG_nRESET_read()    ? DAP_SWJ_nRESET    : 0);
 
   resp[0] = value;
 }
@@ -1168,6 +1272,8 @@ static void dap_swj_pins(uint8_t *req, uint8_t *resp)
 //-----------------------------------------------------------------------------
 static void dap_swj_clock(uint8_t *req, uint8_t *resp)
 {
+  verbose("t/%s\n", __FUNCTION__);
+
   uint32_t freq;
 
   freq = ((uint32_t)req[3] << 24) | ((uint32_t)req[2] << 16) |
@@ -1181,6 +1287,8 @@ static void dap_swj_clock(uint8_t *req, uint8_t *resp)
 //-----------------------------------------------------------------------------
 static void dap_swj_sequence(uint8_t *req, uint8_t *resp)
 {
+  verbose("t/%s\n", __FUNCTION__);
+
   int size = req[0];
   uint8_t *data = &req[1];
   int offset = 0;
@@ -1201,6 +1309,8 @@ static void dap_swj_sequence(uint8_t *req, uint8_t *resp)
 //-----------------------------------------------------------------------------
 static void dap_swd_configure(uint8_t *req, uint8_t *resp)
 {
+  verbose("t/%s\n", __FUNCTION__);
+
 #ifdef DAP_CONFIG_ENABLE_SWD
   uint8_t data = req[0];
 
@@ -1217,6 +1327,8 @@ static void dap_swd_configure(uint8_t *req, uint8_t *resp)
 //-----------------------------------------------------------------------------
 static void dap_jtag_sequence(uint8_t *req, uint8_t *resp)
 {
+  verbose("t/%s\n", __FUNCTION__);
+
 #ifdef DAP_CONFIG_ENABLE_JTAG
   // TODO: implement
   resp[0] = DAP_OK;
@@ -1229,6 +1341,8 @@ static void dap_jtag_sequence(uint8_t *req, uint8_t *resp)
 //-----------------------------------------------------------------------------
 static void dap_jtag_configure(uint8_t *req, uint8_t *resp)
 {
+  verbose("t/%s\n", __FUNCTION__);
+
 #ifdef DAP_CONFIG_ENABLE_JTAG
   // TODO: implement
   resp[0] = DAP_OK;
@@ -1241,6 +1355,8 @@ static void dap_jtag_configure(uint8_t *req, uint8_t *resp)
 //-----------------------------------------------------------------------------
 static void dap_jtag_idcode(uint8_t *req, uint8_t *resp)
 {
+  verbose("t/%s\n", __FUNCTION__);
+
 #ifdef DAP_CONFIG_ENABLE_JTAG
   // TODO: implement
   resp[0] = DAP_OK;
@@ -1290,24 +1406,24 @@ void dap_process_request(uint8_t *req, uint8_t *resp)
     void   (*handler)(uint8_t *, uint8_t *);
   } handlers[] =
   {
-    { ID_DAP_INFO,                      dap_info },
-    { ID_DAP_LED,                       dap_led },
-    { ID_DAP_CONNECT,                   dap_connect },
-    { ID_DAP_DISCONNECT,                dap_disconnect },
-    { ID_DAP_TRANSFER_CONFIGURE,        dap_transfer_configure },
-    { ID_DAP_TRANSFER,                  dap_transfer },
-    { ID_DAP_TRANSFER_BLOCK,            dap_transfer_block },
-    { ID_DAP_TRANSFER_ABORT,            dap_transfer_abort },
-    { ID_DAP_WRITE_ABORT,               dap_write_abort },
-    { ID_DAP_DELAY,                     dap_delay },
-    { ID_DAP_RESET_TARGET,              dap_reset_target },
-    { ID_DAP_SWJ_PINS,                  dap_swj_pins },
-    { ID_DAP_SWJ_CLOCK,                 dap_swj_clock },
-    { ID_DAP_SWJ_SEQUENCE,              dap_swj_sequence },
-    { ID_DAP_SWD_CONFIGURE,             dap_swd_configure },
-    { ID_DAP_JTAG_SEQUENCE,             dap_jtag_sequence },
-    { ID_DAP_JTAG_CONFIGURE,            dap_jtag_configure },
-    { ID_DAP_JTAG_IDCODE,               dap_jtag_idcode },
+    { ID_DAP_INFO,			dap_info },
+    { ID_DAP_LED,			dap_led },
+    { ID_DAP_CONNECT,			dap_connect },
+    { ID_DAP_DISCONNECT,		dap_disconnect },
+    { ID_DAP_TRANSFER_CONFIGURE,	dap_transfer_configure },
+    { ID_DAP_TRANSFER,			dap_transfer },
+    { ID_DAP_TRANSFER_BLOCK,		dap_transfer_block },
+    { ID_DAP_TRANSFER_ABORT,		dap_transfer_abort },
+    { ID_DAP_WRITE_ABORT,		dap_write_abort },
+    { ID_DAP_DELAY,			dap_delay },
+    { ID_DAP_RESET_TARGET,		dap_reset_target },
+    { ID_DAP_SWJ_PINS,			dap_swj_pins },
+    { ID_DAP_SWJ_CLOCK,			dap_swj_clock },
+    { ID_DAP_SWJ_SEQUENCE,		dap_swj_sequence },
+    { ID_DAP_SWD_CONFIGURE,		dap_swd_configure },
+    { ID_DAP_JTAG_SEQUENCE,		dap_jtag_sequence },
+    { ID_DAP_JTAG_CONFIGURE,		dap_jtag_configure },
+    { ID_DAP_JTAG_IDCODE,		dap_jtag_idcode },
     { -1, NULL },
   };
   int cmd = req[0];
