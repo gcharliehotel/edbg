@@ -935,6 +935,7 @@ static void dap_info(uint8_t *req, uint8_t *resp)
   {
     if (dap_info_strings[index])
     {
+      verbose("dap_info: %s\n", dap_info_strings[index]);
       resp[0] = strlen(dap_info_strings[index]) + 1;
       strcpy((char *)&resp[1], dap_info_strings[index]);
     }
