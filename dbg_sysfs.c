@@ -101,6 +101,7 @@ int gpio_open(int num) {
   char path[PATH_MAX];
   gpio_set_path(path, sizeof(path), num, "value");
   int fd = open(path, O_RDWR);
+  verbose("opened gpio %s as %d", path, fd);
   if (fd < 0)
     perror_exit("open()");
   return fd;
@@ -112,18 +113,21 @@ int gpio_read(int fd) {
     perror_exit("lseek");
   char cc;
   int n = read(fd, &cc, 1);
+  verbose("read gpio fd=%d as rc=%d, value=%d", fd, n, cc);
   if (n != 1)
     perror_exit("read");
   if (cc == '0') {
     return 0;
   } else if (cc == '1') {
     return 1;
-  } else
+  } else {
     error_exit("unexpected value read from gpio (0x%02X)", (int) cc);
-  return -1;
+    return -1;
+  }
 }
 
 void gpio_set(int fd, int value) {
+  verbose("setting gpio fd=%d to %d", fd, value);
   check(fd >= 0, "gpio_set: fd < 0");
   if (lseek(fd, 0, SEEK_SET) < 0)
     perror_exit("lseek");
