@@ -152,7 +152,6 @@ enum
 //-----------------------------------------------------------------------------
 void dap_led(int index, int state)
 {
-  verbose("%s\n", __FUNCTION__);
   uint8_t buf[3];
 
   buf[0] = ID_DAP_LED;
@@ -187,7 +186,6 @@ void dap_disconnect(void)
 //-----------------------------------------------------------------------------
 void dap_swj_clock(uint32_t clock)
 {
-  verbose("%s\n", __FUNCTION__);
   uint8_t buf[5];
 
   buf[0] = ID_DAP_SWJ_CLOCK;
@@ -203,7 +201,6 @@ void dap_swj_clock(uint32_t clock)
 //-----------------------------------------------------------------------------
 void dap_transfer_configure(uint8_t idle, uint16_t count, uint16_t retry)
 {
-  verbose("%s\n", __FUNCTION__);
   uint8_t buf[6];
 
   buf[0] = ID_DAP_TRANSFER_CONFIGURE;
@@ -220,7 +217,6 @@ void dap_transfer_configure(uint8_t idle, uint16_t count, uint16_t retry)
 //-----------------------------------------------------------------------------
 void dap_swd_configure(uint8_t cfg)
 {
-  verbose("%s\n", __FUNCTION__);
   uint8_t buf[2];
 
   buf[0] = ID_DAP_SWD_CONFIGURE;
@@ -233,7 +229,6 @@ void dap_swd_configure(uint8_t cfg)
 //-----------------------------------------------------------------------------
 void dap_get_debugger_info(void)
 {
-  verbose("%s\n", __FUNCTION__);
   uint8_t buf[100];
   char str[500] = "";
 
@@ -294,7 +289,6 @@ void dap_reset_target(void)
 //-----------------------------------------------------------------------------
 void dap_reset_target_hw(int state)
 {
-  verbose("%s\n", __FUNCTION__);
   uint8_t buf[7];
   int value = state ? (DAP_SWJ_SWCLK_TCK | DAP_SWJ_SWDIO_TMS) : 0;
 
@@ -454,7 +448,6 @@ void dap_write_block(uint32_t addr, uint8_t *data, int size)
 //-----------------------------------------------------------------------------
 void dap_reset_link(void)
 {
-  verbose("%s\n", __FUNCTION__);
   uint8_t buf[128];
 
   //-------------
@@ -498,7 +491,6 @@ uint32_t dap_read_idcode(void)
 //-----------------------------------------------------------------------------
 void dap_target_prepare(void)
 {
-  verbose("%s\n", __FUNCTION__);
   dap_write_reg(SWD_DP_W_ABORT, 0x00000016);
   dap_write_reg(SWD_DP_W_SELECT, 0x00000000);
   dap_write_reg(SWD_DP_W_CTRL_STAT, 0x50000f00);

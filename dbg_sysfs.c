@@ -62,6 +62,7 @@ static gpio_t gpio_nreset;
 static uint8_t req_buffer[1024];
 static uint8_t res_buffer[1024];
 static int report_size = sizeof(res_buffer); // must be same as above.
+static int verbose_commands = 0;
 
 /*- Forward */
 
@@ -235,11 +236,11 @@ int dbg_get_report_size(void)
 #define DAP_CONFIG_DEVICE_NAME_STR NULL
 
 // A value at which dap_clock_test() produces 1 kHz output on the SWCLK pin
-#define DAP_CONFIG_DELAY_CONSTANT      4700
+#define DAP_CONFIG_DELAY_CONSTANT      500
 
 // A threshold for switching to fast clock (no added delays)
 // This is the frequency produced by dap_clock_test(1) on the SWCLK pin
-#define DAP_CONFIG_FAST_CLOCK          3600000 // Hz
+#define DAP_CONFIG_FAST_CLOCK         10000000 // Hz
 
 /*- Definitions -------------------------------------------------------------*/
 enum
@@ -540,21 +541,13 @@ static inline void DAP_CONFIG_LED(int index, int state)
 //-----------------------------------------------------------------------------
 static inline void dap_delay_loop(int delay)
 {
-  while (--delay)
-    asm("nop");
+  usleep(delay);
 }
 
 //-----------------------------------------------------------------------------
 static void dap_delay_us(int delay)
 {
-  while (delay)
-  {
-    int del = (delay > 100000) ? 100000 : delay;
-
-    dap_delay_loop((DAP_CONFIG_DELAY_CONSTANT * 2 * del) / 1000);
-
-    delay -= del;
-  }
+  usleep(delay);
 }
 
 //-----------------------------------------------------------------------------
@@ -644,6 +637,7 @@ static void dap_setup_clock(int freq)
 {
   if (freq > DAP_CONFIG_FAST_CLOCK)
   {
+    verbose("enabling fast clock\n");
     dap_clock_delay = 1;
     dap_swd_clock = dap_swd_clock_fast;
     dap_swd_write = dap_swd_write_fast;
@@ -977,7 +971,7 @@ static void dap_swd_transfer_block(uint8_t *req, uint8_t *resp)
 //-----------------------------------------------------------------------------
 static void dap_info(uint8_t *req, uint8_t *resp)
 {
-  verbose("t/%s\n", __FUNCTION__);
+  if (verbose_commands) message("t/%s\n", __FUNCTION__);
 
   int index = req[0];
 
@@ -1021,7 +1015,7 @@ static void dap_info(uint8_t *req, uint8_t *resp)
 //-----------------------------------------------------------------------------
 static void dap_led(uint8_t *req, uint8_t *resp)
 {
-  verbose("t/%s\n", __FUNCTION__);
+  if (verbose_commands) message("t/%s\n", __FUNCTION__);
 
   int index = req[0];
   int state = req[1];
@@ -1034,7 +1028,7 @@ static void dap_led(uint8_t *req, uint8_t *resp)
 //-----------------------------------------------------------------------------
 static void dap_connect(uint8_t *req, uint8_t *resp)
 {
-  verbose("t/%s\n", __FUNCTION__);
+  if (verbose_commands) message("t/%s\n", __FUNCTION__);
 
   int port = req[0];
 
@@ -1065,7 +1059,7 @@ static void dap_connect(uint8_t *req, uint8_t *resp)
 //-----------------------------------------------------------------------------
 static void dap_disconnect(uint8_t *req, uint8_t *resp)
 {
-  verbose("t/%s\n", __FUNCTION__);
+  if (verbose_commands) message("t/%s\n", __FUNCTION__);
 
   DAP_CONFIG_DISCONNECT();
 
@@ -1079,7 +1073,7 @@ static void dap_disconnect(uint8_t *req, uint8_t *resp)
 //-----------------------------------------------------------------------------
 static void dap_transfer_configure(uint8_t *req, uint8_t *resp)
 {
-  verbose("t/%s\n", __FUNCTION__);
+  if (verbose_commands) message("t/%s\n", __FUNCTION__);
 
   dap_idle_cycles = req[0];
   dap_retry_count = ((int)req[2] << 8) | req[1];
@@ -1091,7 +1085,7 @@ static void dap_transfer_configure(uint8_t *req, uint8_t *resp)
 //-----------------------------------------------------------------------------
 static void dap_transfer(uint8_t *req, uint8_t *resp)
 {
-  verbose("t/%s\n", __FUNCTION__);
+  if (verbose_commands) message("t/%s\n", __FUNCTION__);
 
   resp[0] = 0;
   resp[1] = DAP_TRANSFER_INVALID;
@@ -1110,7 +1104,7 @@ static void dap_transfer(uint8_t *req, uint8_t *resp)
 //-----------------------------------------------------------------------------
 static void dap_transfer_block(uint8_t *req, uint8_t *resp)
 {
-  verbose("t/%s\n", __FUNCTION__);
+  if (verbose_commands) message("t/%s\n", __FUNCTION__);
 
   resp[0] = 0;
   resp[1] = 0;
@@ -1130,7 +1124,7 @@ static void dap_transfer_block(uint8_t *req, uint8_t *resp)
 //-----------------------------------------------------------------------------
 static void dap_transfer_abort(uint8_t *req, uint8_t *resp)
 {
-  verbose("t/%s\n", __FUNCTION__);
+  if (verbose_commands) message("t/%s\n", __FUNCTION__);
 
   // This request is handled outside of the normal queue
   // TODO: verify entire transfer abort mechanism
@@ -1141,7 +1135,7 @@ static void dap_transfer_abort(uint8_t *req, uint8_t *resp)
 //-----------------------------------------------------------------------------
 static void dap_write_abort(uint8_t *req, uint8_t *resp)
 {
-  verbose("t/%s\n", __FUNCTION__);
+  if (verbose_commands) message("t/%s\n", __FUNCTION__);
 
 #ifdef DAP_CONFIG_ENABLE_SWD
   if (DAP_PORT_SWD == dap_port)
@@ -1169,7 +1163,7 @@ static void dap_write_abort(uint8_t *req, uint8_t *resp)
 //-----------------------------------------------------------------------------
 static void dap_delay(uint8_t *req, uint8_t *resp)
 {
-  verbose("t/%s\n", __FUNCTION__);
+  if (verbose_commands) message("t/%s\n", __FUNCTION__);
 
   int delay;
 
@@ -1183,7 +1177,7 @@ static void dap_delay(uint8_t *req, uint8_t *resp)
 //-----------------------------------------------------------------------------
 static void dap_reset_target(uint8_t *req, uint8_t *resp)
 {
-  verbose("t/%s\n", __FUNCTION__);
+  if (verbose_commands) message("t/%s\n", __FUNCTION__);
 
   resp[0] = DAP_OK;
 #ifdef DAP_CONFIG_RESET_TARGET_FN
@@ -1196,7 +1190,7 @@ static void dap_reset_target(uint8_t *req, uint8_t *resp)
 //-----------------------------------------------------------------------------
 static void dap_swj_pins(uint8_t *req, uint8_t *resp)
 {
-  verbose("t/%s\n", __FUNCTION__);
+  if (verbose_commands) message("t/%s\n", __FUNCTION__);
 
   int value = req[0];
   int select = req[1];
@@ -1235,7 +1229,7 @@ static void dap_swj_pins(uint8_t *req, uint8_t *resp)
 //-----------------------------------------------------------------------------
 static void dap_swj_clock(uint8_t *req, uint8_t *resp)
 {
-  verbose("t/%s\n", __FUNCTION__);
+  if (verbose_commands) message("t/%s\n", __FUNCTION__);
 
   uint32_t freq;
 
@@ -1250,7 +1244,7 @@ static void dap_swj_clock(uint8_t *req, uint8_t *resp)
 //-----------------------------------------------------------------------------
 static void dap_swj_sequence(uint8_t *req, uint8_t *resp)
 {
-  verbose("t/%s\n", __FUNCTION__);
+  if (verbose_commands) message("t/%s\n", __FUNCTION__);
 
   int size = req[0];
   uint8_t *data = &req[1];
@@ -1272,7 +1266,7 @@ static void dap_swj_sequence(uint8_t *req, uint8_t *resp)
 //-----------------------------------------------------------------------------
 static void dap_swd_configure(uint8_t *req, uint8_t *resp)
 {
-  verbose("t/%s\n", __FUNCTION__);
+  if (verbose_commands) message("t/%s\n", __FUNCTION__);
 
 #ifdef DAP_CONFIG_ENABLE_SWD
   uint8_t data = req[0];
@@ -1290,7 +1284,7 @@ static void dap_swd_configure(uint8_t *req, uint8_t *resp)
 //-----------------------------------------------------------------------------
 static void dap_jtag_sequence(uint8_t *req, uint8_t *resp)
 {
-  verbose("t/%s\n", __FUNCTION__);
+  if (verbose_commands) message("t/%s\n", __FUNCTION__);
 
 #ifdef DAP_CONFIG_ENABLE_JTAG
   // TODO: implement
@@ -1304,7 +1298,7 @@ static void dap_jtag_sequence(uint8_t *req, uint8_t *resp)
 //-----------------------------------------------------------------------------
 static void dap_jtag_configure(uint8_t *req, uint8_t *resp)
 {
-  verbose("t/%s\n", __FUNCTION__);
+  if (verbose_commands) message("t/%s\n", __FUNCTION__);
 
 #ifdef DAP_CONFIG_ENABLE_JTAG
   // TODO: implement
@@ -1318,7 +1312,7 @@ static void dap_jtag_configure(uint8_t *req, uint8_t *resp)
 //-----------------------------------------------------------------------------
 static void dap_jtag_idcode(uint8_t *req, uint8_t *resp)
 {
-  verbose("t/%s\n", __FUNCTION__);
+  if (verbose_commands) message("t/%s\n", __FUNCTION__);
 
 #ifdef DAP_CONFIG_ENABLE_JTAG
   // TODO: implement
@@ -1439,16 +1433,6 @@ void dap_clock_test(int delay)
 }
 
 //-----------------------------------------------------------------------------
-void hexdump(uint8_t *data, int n) {
-  for(int i = 0; i < n; i += 16) {
-    printf("%04X:", i);
-    for (int j = 0; j < 16 && i + j < n; ++j) {
-      printf(" %02X ", data[i + j]);
-    }
-    printf("\n");
-  }
-}
-//-----------------------------------------------------------------------------
 int dbg_dap_cmd(uint8_t *data, int size, int rsize)
 {
 #if 0
@@ -1475,15 +1459,10 @@ int dbg_dap_cmd(uint8_t *data, int size, int rsize)
   return res;
 #endif
   char cmd = data[0];
-  //verbose("size=%d, rsize=%d\n", size, rsize);
   memset(req_buffer, 0xff, sizeof(req_buffer));
   memset(res_buffer, 0xff, sizeof(res_buffer));
   memcpy(req_buffer, data, rsize);
-  //printf("req_buffer, rsize=%d:\n", rsize);
-  //hexdump(req_buffer, sizeof(req_buffer));
   dap_process_request(req_buffer, res_buffer);
-  //printf("res_buffer, size=%d:\n", size);
-  //hexdump(res_buffer, sizeof(res_buffer));
   check(res_buffer[0] == cmd, "invalid rsponse received");
   memcpy(data, &res_buffer[1], size);
   return 0;
