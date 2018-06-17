@@ -45,13 +45,20 @@
 typedef struct
 {
   int num;
-  int fd;
+  int value_fd;
+  int direction_fd;
+  int dir;
 } gpio_t;
 
+#define GPIO_DIR_UNDEFINED -1
+#define GPIO_DIR_IN 0
+#define GPIO_DIR_IN_PULLUP 1
+#define GPIO_DIR_OUT 2
+
 /*- Variables ---------------------------------------------------------------*/
-static gpio_t gpio_swdio = {-1, -1};
-static gpio_t gpio_swclk  = {-1, -1};
-static gpio_t gpio_nreset  = {-1, -1};
+static gpio_t gpio_swdio;
+static gpio_t gpio_swclk;
+static gpio_t gpio_nreset;
 static uint8_t req_buffer[1024];
 static uint8_t res_buffer[1024];
 static int report_size = sizeof(res_buffer); // must be same as above.
@@ -62,74 +69,79 @@ void dap_init(void);
 
 /*- Implementations ---------------------------------------------------------*/
 
-void save_file2(char *path, char *buf) {
-  save_file(path, (uint8_t *)buf, strlen(buf));
+void gpio_init(gpio_t *gpio, int gpio_num) {
+  gpio->num = gpio_num;
+  gpio->value_fd = -1;
+  gpio->direction_fd = -1;
+  gpio->dir = GPIO_DIR_UNDEFINED;
 }
-
-#if 0
-void gpio_export(gpio_t *gpio) {
-  char buf[100];
-  snprintf(buf, sizeof(buf), "%d", gpio->num);
-  save_file2("/sys/class/gpio/export", buf);
-}
-
-void gpio_unexport(gpio_t *gpio) {
-  char buf[100];
-  snprintf(buf, sizeof(buf), "%d", gpio->num);
-  save_file2("/sys/class/gpio/unexport", buf);
-}
-#endif
 
 void gpio_set_path(gpio_t *gpio, char *buf, size_t size, char *attribute) {
   snprintf(buf, size, "/sys/class/gpio/gpio%d/%s", gpio->num, attribute);
 }
 
-void gpio_set_as_output(gpio_t *gpio, int initial_value) {
-  verbose("setting gpio %d as output to %d\n", gpio->num, initial_value);
-  char path[PATH_MAX];
-  gpio_set_path(gpio, path, sizeof(path), "direction");
-  save_file2(path, initial_value ? "high" : "low");
-}
-
-void gpio_set_as_input(gpio_t *gpio) {
-  verbose("setting gpio %d as input\n", gpio->num);
-  char path[PATH_MAX];
-  gpio_set_path(gpio, path, sizeof(path), "direction");
-  save_file2(path, "in");
-}
-
-void gpio_set_pullup(gpio_t *gpio) {
-  verbose("setting gpio %d as pullup\n", gpio->num);
-  // This might not work.
-  gpio_set_as_output(gpio, 1);
-}
-
 void gpio_open(gpio_t *gpio) {
-  check(gpio->fd == -1, "attemp to repon gpio?\n");
+  check(gpio->value_fd == -1, "attempt to re-open gpio\n");
   char path[PATH_MAX];
-  gpio_set_path(gpio, path, sizeof(path), "value");
+  gpio_set_path(gpio, path, sizeof(path), "direction");
   int fd = open(path, O_RDWR);
-  verbose("opened gpio %s as %d\n", path, fd);
   if (fd < 0)
     perror_exit("open()");
-  gpio->fd = fd;
+  gpio->direction_fd = fd;
+
+  gpio_set_path(gpio, path, sizeof(path), "value");
+  fd = open(path, O_RDWR);
+  //verbose("opened gpio %s as %d\n", path, fd);
+  if (fd < 0)
+    perror_exit("open()");
+  gpio->value_fd = fd;
 }
 
 void gpio_close(gpio_t *gpio) {
-  if (gpio->fd >= 0) {
-    close(gpio->fd);
-    gpio->fd = -1;
+  if (gpio->direction_fd >= 0) {
+    close(gpio->direction_fd);
+    gpio->direction_fd = -1;
+  }
+  if (gpio->value_fd >= 0) {
+    close(gpio->value_fd);
+    gpio->value_fd = -1;
   }
 }
 
+void gpio_change_direction(gpio_t *gpio, char *direction) {
+  // verbose("setting gpio %d direction to %s\n", gpio->num, direction);
+  check(gpio->direction_fd >= 0, "gpio_change_direction: fd < 0");
+  if (lseek(gpio->direction_fd, 0, SEEK_SET) < 0)
+    perror_exit("lseek");
+  int n = strlen(direction);
+  int rc = write(gpio->direction_fd, direction, n);
+  if (n != rc)
+    perror_exit("failed to set gpio direction");
+}
+
+void gpio_set_as_output(gpio_t *gpio, int initial_value) {
+  //verbose("setting gpio %d as output to %d\n", gpio->num, initial_value);
+  gpio->dir = GPIO_DIR_OUT;
+  gpio_change_direction(gpio, initial_value ? "high" : "low");
+}
+
+void gpio_set_as_input(gpio_t *gpio) {
+  gpio->dir = GPIO_DIR_IN;
+  gpio_change_direction(gpio, "in");
+}
+
+void gpio_set_pullup(gpio_t *gpio) {
+  gpio->dir = GPIO_DIR_IN_PULLUP;
+  gpio_change_direction(gpio, "in");
+}
+
 int gpio_read(gpio_t *gpio) {
-  check(gpio->fd >= 0, "gpio_read: fd < 0");
-  if (lseek(gpio->fd, 0, SEEK_SET) < 0)
+  check(gpio->value_fd >= 0, "gpio_read: fd < 0");
+  if (lseek(gpio->value_fd, 0, SEEK_SET) < 0)
     perror_exit("lseek");
   char cc;
-  int n = read(gpio->fd, &cc, 1);
-  verbose("read gpio %d (fd=%d) as rc=%d, value=%d\n",
-	  gpio->num, gpio->fd, n, cc);
+  int n = read(gpio->value_fd, &cc, 1);
+  //verbose("read gpio %d as rc=%d, value=%d\n", gpio->num, n, cc);
   if (n != 1)
     perror_exit("read");
   if (cc == '0') {
@@ -142,24 +154,44 @@ int gpio_read(gpio_t *gpio) {
   }
 }
 
-void gpio_write(gpio_t *gpio, int value) {
-  verbose("setting gpio %d (fd=%d) to %d\n", gpio->num, gpio->fd, value);
-  check(gpio->fd >= 0, "gpio_set: fd < 0");
-  if (lseek(gpio->fd, 0, SEEK_SET) < 0)
+void gpio_change_value(gpio_t *gpio, int value) {
+  check(gpio->value_fd >= 0, "gpio_set: fd < 0");
+  if (lseek(gpio->value_fd, 0, SEEK_SET) < 0)
     perror_exit("lseek");
   char cc = value ? '1' : '0';
-  int n = write(gpio->fd, &cc, 1);
+  int n = write(gpio->value_fd, &cc, 1);
   if (n != 1)
-    warning("failed to set gpio %d (fd=%d) to %d\n", gpio->num, gpio->fd, value);
+    error_exit("failed to set gpio %d to %d\n", gpio->num, value);
+}
+
+void gpio_write(gpio_t *gpio, int value) {
+  // verbose("setting gpio %d to %d\n", gpio->num, value);
+  switch (gpio->dir) {
+  case GPIO_DIR_IN:
+    warning("gpio %d: cannot write %d to input", gpio->num, value);
+    break;
+  case GPIO_DIR_IN_PULLUP:
+    if (value) {
+      gpio_change_direction(gpio, "in");
+    } else {
+      gpio_change_direction(gpio, "low");
+    }
+    break;
+  case GPIO_DIR_OUT:
+    gpio_change_value(gpio, value);
+    break;
+  default:
+    error_exit("gpio %d: undefined direction", gpio->num);
+  }
 }
 
 //-----------------------------------------------------------------------------
 void dbg_open(int swdio_gpio_num, int swclk_gpio_num, int nreset_gpio_num)
 {
   verbose("dbg_open\n");
-  gpio_swdio.num = swdio_gpio_num;
-  gpio_swclk.num = swclk_gpio_num;
-  gpio_nreset.num = nreset_gpio_num;
+  gpio_init(&gpio_swdio, swdio_gpio_num);
+  gpio_init(&gpio_swclk, swclk_gpio_num);
+  gpio_init(&gpio_nreset, nreset_gpio_num);
   gpio_open(&gpio_swdio);
   gpio_open(&gpio_swclk);
   gpio_open(&gpio_nreset);
@@ -331,117 +363,43 @@ static bool dap_swd_data_phase;
 
 /*- Implementations ---------------------------------------------------------*/
 
-static inline void HAL_GPIO_SWCLK_TCK_set(void) {
-  verbose("%s\n", __FUNCTION__);
-  gpio_write(&gpio_swclk, 1);
-}
+#define DEFINE_GPIO(name, gpio)                              \
+  static inline void HAL_GPIO_##name##_set(void) {           \
+    verbose("%s\n", __FUNCTION__);                           \
+    gpio_write(&gpio, 1);                                    \
+  }                                                          \
+  static inline void HAL_GPIO_##name##_clr(void) {           \
+    verbose("%s\n", __FUNCTION__);                           \
+    gpio_write(&gpio, 0);                                    \
+  }                                                          \
+  static inline void HAL_GPIO_##name##_write(int value) {    \
+    value = !!value;                                         \
+    verbose("%s %d\n", __FUNCTION__, value);                 \
+    gpio_write(&gpio, value);                                \
+  }                                                          \
+  static inline int HAL_GPIO_##name##_read() {               \
+    int n = gpio_read(&gpio);                                \
+    verbose("%s => %d\n", __FUNCTION__, n);                  \
+    return n;                                                \
+  }                                                          \
+  static inline void HAL_GPIO_##name##_in(void) {            \
+    verbose("%s\n", __FUNCTION__);                           \
+    gpio_set_as_input(&gpio);                                \
+  }                                                          \
+  static inline void HAL_GPIO_##name##_out(void) {           \
+    verbose("%s\n", __FUNCTION__);                           \
+    gpio_set_as_output(&gpio, 0);                            \
+  }                                                          \
+  static inline void HAL_GPIO_##name##_pullup(void) {        \
+    verbose("%s\n", __FUNCTION__);                           \
+    gpio_set_pullup(&gpio);                                  \
+  }
 
-static inline void HAL_GPIO_SWCLK_TCK_clr(void) {
-  verbose("%s\n", __FUNCTION__);
-  gpio_write(&gpio_swclk, 0);
-}
+DEFINE_GPIO(SWDIO_TMS, gpio_swdio)
+DEFINE_GPIO(SWCLK_TCK, gpio_swclk)
+DEFINE_GPIO(nRESET, gpio_nreset)
 
-static inline void HAL_GPIO_SWCLK_TCK_write(int value) {
-  verbose("%s %d\n", __FUNCTION__, value);
-  gpio_write(&gpio_swclk, !!value);
-}
-
-static inline int HAL_GPIO_SWCLK_TCK_read() {
-  int n = gpio_read(&gpio_swclk);
-  verbose("%s => %d\n", __FUNCTION__, n);
-  return n;
-}
-
-static inline void HAL_GPIO_SWCLK_TCK_in(void) {
-  verbose("%s\n", __FUNCTION__);
-  gpio_set_as_input(&gpio_swclk);
-}
-
-static inline void HAL_GPIO_SWCLK_TCK_out(void) {
-  verbose("%s\n", __FUNCTION__);
-  gpio_set_as_output(&gpio_swclk, 1);
-}
-
-static inline void HAL_GPIO_SWCLK_TCK_pullup(void) {
-  verbose("%s\n", __FUNCTION__);
-  gpio_set_pullup(&gpio_swclk);
-}
-
-//
-
-static inline void HAL_GPIO_SWDIO_TMS_set(void) {
-  verbose("%s\n", __FUNCTION__);
-  gpio_write(&gpio_swdio, 1);
-}
-
-static inline void HAL_GPIO_SWDIO_TMS_clr(void) {
-  verbose("%s\n", __FUNCTION__);
-  gpio_write(&gpio_swdio, 0);
-}
-
-static inline void HAL_GPIO_SWDIO_TMS_write(int value) {
-  verbose("%s %d\n", __FUNCTION__, value);
-  gpio_write(&gpio_swdio, !!value);
-}
-
-static inline int HAL_GPIO_SWDIO_TMS_read() {
-  int n = gpio_read(&gpio_swdio);
-  verbose("%s => %d\n", __FUNCTION__, n);
-  return n;
-}
-
-static inline void HAL_GPIO_SWDIO_TMS_in(void) {
-  verbose("%s\n", __FUNCTION__);
-  gpio_set_as_input(&gpio_swdio);
-}
-
-static inline void HAL_GPIO_SWDIO_TMS_out(void) {
-  verbose("%s\n", __FUNCTION__);
-  gpio_set_as_output(&gpio_swdio, 1);
-}
-
-static inline void HAL_GPIO_SWDIO_TMS_pullup(void) {
-  verbose("%s\n", __FUNCTION__);
-  gpio_set_pullup(&gpio_swdio);
-}
-
-//
-
-static inline void HAL_GPIO_nRESET_set(void) {
-  verbose("%s\n", __FUNCTION__);
-  gpio_write(&gpio_nreset, 1);
-}
-
-static inline void HAL_GPIO_nRESET_clr(void) {
-  verbose("%s\n", __FUNCTION__);
-  gpio_write(&gpio_nreset, 0);
-}
-
-static inline void HAL_GPIO_nRESET_write(int value) {
-  verbose("%s %d\n", __FUNCTION__, value);
-  gpio_write(&gpio_nreset, !!value);
-}
-
-static inline int HAL_GPIO_nRESET_read(void) {
-  int n = gpio_read(&gpio_nreset);
-  verbose("%s => %d\n", __FUNCTION__, n);
-  return n;
-}
-
-static inline void HAL_GPIO_nRESET_in(void) {
-  verbose("%s\n", __FUNCTION__);
-  gpio_set_as_input(&gpio_nreset);
-}
-
-static inline void HAL_GPIO_nRESET_out(void) {
-  verbose("%s\n", __FUNCTION__);
-  gpio_set_as_output(&gpio_nreset, 1);
-}
-
-static inline void HAL_GPIO_nRESET_pullup(void) {
-  warning("NI %s\n", __FUNCTION__);
-  gpio_set_pullup(&gpio_nreset);
-}
+#undef DEFINE_GPIO
 
 //-----------------------------------------------------------------------------
 static inline void DAP_CONFIG_SWCLK_TCK_write(int value)
@@ -1032,13 +990,11 @@ static void dap_info(uint8_t *req, uint8_t *resp)
   {
     if (dap_info_strings[index])
     {
-      verbose(".dap_info[%d]=%s\n", index, dap_info_strings[index]);
       resp[0] = strlen(dap_info_strings[index]) + 1;
       strcpy((char *)&resp[1], dap_info_strings[index]);
     }
     else
     {
-      verbose(".dap_info[%d]=NULL\n", index);
       resp[0] = 0;
     }
   }
@@ -1524,7 +1480,7 @@ int dbg_dap_cmd(uint8_t *data, int size, int rsize)
   return res;
 #endif
   char cmd = data[0];
-  verbose("size=%d, rsize=%d\n", size, rsize);
+  //verbose("size=%d, rsize=%d\n", size, rsize);
   memset(req_buffer, 0xff, sizeof(req_buffer));
   memset(res_buffer, 0xff, sizeof(res_buffer));
   memcpy(req_buffer, data, rsize);

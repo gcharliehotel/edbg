@@ -576,6 +576,8 @@ int main(int argc, char **argv)
     error_exit("No GPIO specificed for SWDIO");
   if (g_swclk_gpio_num < 0)
     error_exit("No GPIO specificed for SWCLK");
+  if (g_nreset_gpio_num < 0)
+    error_exit("No GPIO specificed for nRESET");
 
   dbg_open(g_swdio_gpio_num, g_swclk_gpio_num, g_nreset_gpio_num);
 
