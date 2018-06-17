@@ -130,7 +130,11 @@ void gpio_set_as_input(gpio_t *gpio) {
   gpio_change_direction(gpio, "in");
 }
 
-void gpio_set_pullup(gpio_t *gpio) {
+void gpio_set_as_input_with_pullup(gpio_t *gpio) {
+  // This doesn't activate any pullup -- that can't be done with the
+  // sysfs interface.  Rather this makes the gpio work on GPIO port
+  // that has a pullup.  That pullup must be established elsewhere
+  // (device tree gpio config, external resistor, etc.).
   gpio->dir = GPIO_DIR_IN_PULLUP;
   gpio_change_direction(gpio, "in");
 }
@@ -363,36 +367,27 @@ static bool dap_swd_data_phase;
 
 /*- Implementations ---------------------------------------------------------*/
 
-#define DEFINE_GPIO(name, gpio)                              \
-  static inline void HAL_GPIO_##name##_set(void) {           \
-    verbose("%s\n", __FUNCTION__);                           \
-    gpio_write(&gpio, 1);                                    \
-  }                                                          \
-  static inline void HAL_GPIO_##name##_clr(void) {           \
-    verbose("%s\n", __FUNCTION__);                           \
-    gpio_write(&gpio, 0);                                    \
-  }                                                          \
-  static inline void HAL_GPIO_##name##_write(int value) {    \
-    value = !!value;                                         \
-    verbose("%s %d\n", __FUNCTION__, value);                 \
-    gpio_write(&gpio, value);                                \
-  }                                                          \
-  static inline int HAL_GPIO_##name##_read() {               \
-    int n = gpio_read(&gpio);                                \
-    verbose("%s => %d\n", __FUNCTION__, n);                  \
-    return n;                                                \
-  }                                                          \
-  static inline void HAL_GPIO_##name##_in(void) {            \
-    verbose("%s\n", __FUNCTION__);                           \
-    gpio_set_as_input(&gpio);                                \
-  }                                                          \
-  static inline void HAL_GPIO_##name##_out(void) {           \
-    verbose("%s\n", __FUNCTION__);                           \
-    gpio_set_as_output(&gpio, 0);                            \
-  }                                                          \
-  static inline void HAL_GPIO_##name##_pullup(void) {        \
-    verbose("%s\n", __FUNCTION__);                           \
-    gpio_set_pullup(&gpio);                                  \
+#define DEFINE_GPIO(name, gpio)                               \
+  static inline void HAL_GPIO_##name##_set(void) {            \
+    gpio_write(&gpio, 1);                                     \
+  }                                                           \
+  static inline void HAL_GPIO_##name##_clr(void) {            \
+    gpio_write(&gpio, 0);                                     \
+  }                                                           \
+  static inline void HAL_GPIO_##name##_write(int value) {     \
+    gpio_write(&gpio, !!value);                               \
+  }                                                           \
+  static inline int HAL_GPIO_##name##_read() {                \
+    return gpio_read(&gpio);                                  \
+  }                                                           \
+  static inline void HAL_GPIO_##name##_in(void) {             \
+    gpio_set_as_input(&gpio);                                 \
+  }                                                           \
+  static inline void HAL_GPIO_##name##_out(void) {            \
+    gpio_set_as_output(&gpio, 0);                             \
+  }                                                           \
+  static inline void HAL_GPIO_##name##_pullup(void) {         \
+    gpio_set_as_input_with_pullup(&gpio);                     \
   }
 
 DEFINE_GPIO(SWDIO_TMS, gpio_swdio)
