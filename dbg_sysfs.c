@@ -40,6 +40,30 @@
 #include <sys/stat.h>
 #include "edbg.h"
 #include "dbg.h"
+#include "dap_common.h"
+
+#define DAP_CONFIG_ENABLE_SWD
+
+#define DAP_CONFIG_DEFAULT_PORT DAP_PORT_SWD
+#define DAP_CONFIG_DEFAULT_CLOCK 1000000 // Hz
+
+#define DAP_CONFIG_PACKET_SIZE 128
+#define DAP_CONFIG_PACKET_COUNT 1
+
+#define DAP_CONFIG_VENDOR_STR "edbg"
+#define DAP_CONFIG_PRODUCT_STR "sysfs CMSIS-DAP Adapter"
+#define DAP_CONFIG_SER_NUM_STR "42"
+#define DAP_CONFIG_FW_VER_STR "v0.1"
+#define DAP_CONFIG_DEVICE_VENDOR_STR NULL
+#define DAP_CONFIG_DEVICE_NAME_STR NULL
+
+// A value at which dap_clock_test() produces 1 kHz output on the SWCLK pin
+#define DAP_CONFIG_DELAY_CONSTANT      500
+
+// A threshold for switching to fast clock (no added delays)
+// This is the frequency produced by dap_clock_test(1) on the SWCLK pin
+#define DAP_CONFIG_FAST_CLOCK         10000000 // Hz
+
 
 /*- Types -------------------------------------------------------------------*/
 typedef struct
@@ -55,6 +79,17 @@ typedef struct
 #define GPIO_DIR_IN_PULLUP 1
 #define GPIO_DIR_OUT 2
 
+/*- Constants ---------------------------------------------------------------*/
+static const char * const dap_info_strings[] =
+{
+  [DAP_INFO_VENDOR]        = DAP_CONFIG_VENDOR_STR,
+  [DAP_INFO_PRODUCT]       = DAP_CONFIG_PRODUCT_STR,
+  [DAP_INFO_SER_NUM]       = DAP_CONFIG_SER_NUM_STR,
+  [DAP_INFO_FW_VER]        = DAP_CONFIG_FW_VER_STR,
+  [DAP_INFO_DEVICE_VENDOR] = DAP_CONFIG_DEVICE_VENDOR_STR,
+  [DAP_INFO_DEVICE_NAME]   = DAP_CONFIG_DEVICE_NAME_STR,
+};
+
 /*- Variables ---------------------------------------------------------------*/
 static gpio_t gpio_swdio;
 static gpio_t gpio_swclk;
@@ -64,11 +99,30 @@ static uint8_t res_buffer[1024];
 static int report_size = sizeof(res_buffer); // must be same as above.
 static int verbose_commands = 0;
 
+static int dap_port;
+static bool dap_abort;
+static uint32_t dap_match_mask;
+static int dap_idle_cycles;
+static int dap_retry_count;
+static int dap_match_retry_count;
+static int dap_clock_delay;
+
+static void (*dap_swd_clock)(int);
+static void (*dap_swd_write)(uint32_t, int);
+static uint32_t (*dap_swd_read)(int);
+
+#ifdef DAP_CONFIG_ENABLE_SWD
+static int dap_swd_turnaround;
+static bool dap_swd_data_phase;
+#endif
+
 /*- Forward */
 
 void dap_init(void);
 
 /*- Implementations ---------------------------------------------------------*/
+
+//-----------------------------------------------------------------------------
 
 void gpio_init(gpio_t *gpio, int gpio_num) {
   gpio->num = gpio_num;
@@ -187,180 +241,6 @@ void gpio_write(gpio_t *gpio, int value) {
 }
 
 //-----------------------------------------------------------------------------
-void dbg_open(int swdio_gpio_num, int swclk_gpio_num, int nreset_gpio_num)
-{
-  gpio_init(&gpio_swdio, swdio_gpio_num);
-  gpio_init(&gpio_swclk, swclk_gpio_num);
-  gpio_init(&gpio_nreset, nreset_gpio_num);
-  gpio_open(&gpio_swdio);
-  gpio_open(&gpio_swclk);
-  gpio_open(&gpio_nreset);
-  dap_init();
-}
-
-//-----------------------------------------------------------------------------
-void dbg_close(void)
-{
-  gpio_close(&gpio_swdio);
-  gpio_close(&gpio_swclk);
-  gpio_close(&gpio_nreset);
-}
-
-//-----------------------------------------------------------------------------
-int dbg_get_report_size(void)
-{
-  return report_size;
-}
-
-//-----------------------------------------------------------------------------
-
-#define DAP_CONFIG_ENABLE_SWD
-
-#define DAP_CONFIG_DEFAULT_PORT DAP_PORT_SWD
-#define DAP_CONFIG_DEFAULT_CLOCK 1000000 // Hz
-
-#define DAP_CONFIG_PACKET_SIZE 128
-#define DAP_CONFIG_PACKET_COUNT 1
-
-#define DAP_CONFIG_VENDOR_STR "edbg"
-#define DAP_CONFIG_PRODUCT_STR "sysfs CMSIS-DAP Adapter"
-#define DAP_CONFIG_SER_NUM_STR "42"
-#define DAP_CONFIG_FW_VER_STR "v0.1"
-#define DAP_CONFIG_DEVICE_VENDOR_STR NULL
-#define DAP_CONFIG_DEVICE_NAME_STR NULL
-
-// A value at which dap_clock_test() produces 1 kHz output on the SWCLK pin
-#define DAP_CONFIG_DELAY_CONSTANT      500
-
-// A threshold for switching to fast clock (no added delays)
-// This is the frequency produced by dap_clock_test(1) on the SWCLK pin
-#define DAP_CONFIG_FAST_CLOCK         10000000 // Hz
-
-/*- Definitions -------------------------------------------------------------*/
-enum
-{
-  ID_DAP_INFO               = 0x00,
-  ID_DAP_LED                = 0x01,
-  ID_DAP_CONNECT            = 0x02,
-  ID_DAP_DISCONNECT         = 0x03,
-  ID_DAP_TRANSFER_CONFIGURE = 0x04,
-  ID_DAP_TRANSFER           = 0x05,
-  ID_DAP_TRANSFER_BLOCK     = 0x06,
-  ID_DAP_TRANSFER_ABORT     = 0x07,
-  ID_DAP_WRITE_ABORT        = 0x08,
-  ID_DAP_DELAY              = 0x09,
-  ID_DAP_RESET_TARGET       = 0x0a,
-  ID_DAP_SWJ_PINS           = 0x10,
-  ID_DAP_SWJ_CLOCK          = 0x11,
-  ID_DAP_SWJ_SEQUENCE       = 0x12,
-  ID_DAP_SWD_CONFIGURE      = 0x13,
-  ID_DAP_JTAG_SEQUENCE      = 0x14,
-  ID_DAP_JTAG_CONFIGURE     = 0x15,
-  ID_DAP_JTAG_IDCODE        = 0x16,
-  ID_DAP_VENDOR_0           = 0x80,
-  ID_DAP_VENDOR_31          = 0x9f,
-  ID_DAP_INVALID            = 0xff,
-};
-
-enum
-{
-  DAP_INFO_VENDOR           = 0x01,
-  DAP_INFO_PRODUCT          = 0x02,
-  DAP_INFO_SER_NUM          = 0x03,
-  DAP_INFO_FW_VER           = 0x04,
-  DAP_INFO_DEVICE_VENDOR    = 0x05,
-  DAP_INFO_DEVICE_NAME      = 0x06,
-  DAP_INFO_CAPABILITIES     = 0xf0,
-  DAP_INFO_PACKET_COUNT     = 0xfe,
-  DAP_INFO_PACKET_SIZE      = 0xff,
-};
-
-enum
-{
-  DAP_TRANSFER_APnDP        = 1 << 0,
-  DAP_TRANSFER_RnW          = 1 << 1,
-  DAP_TRANSFER_A2           = 1 << 2,
-  DAP_TRANSFER_A3           = 1 << 3,
-  DAP_TRANSFER_MATCH_VALUE  = 1 << 4,
-  DAP_TRANSFER_MATCH_MASK   = 1 << 5,
-};
-
-enum
-{
-  DAP_TRANSFER_INVALID      = 0,
-  DAP_TRANSFER_OK           = 1 << 0,
-  DAP_TRANSFER_WAIT         = 1 << 1,
-  DAP_TRANSFER_FAULT        = 1 << 2,
-  DAP_TRANSFER_ERROR        = 1 << 3,
-  DAP_TRANSFER_MISMATCH     = 1 << 4,
-};
-
-enum
-{
-  DAP_PORT_DISABLED         = 0,
-  DAP_PORT_AUTODETECT       = 0,
-  DAP_PORT_SWD              = 1,
-  DAP_PORT_JTAG             = 2,
-};
-
-enum
-{
-  DAP_SWJ_SWCLK_TCK         = 1 << 0,
-  DAP_SWJ_SWDIO_TMS         = 1 << 1,
-  DAP_SWJ_TDI               = 1 << 2,
-  DAP_SWJ_TDO               = 1 << 3,
-  DAP_SWJ_nTRST             = 1 << 5,
-  DAP_SWJ_nRESET            = 1 << 7,
-};
-
-enum
-{
-  DAP_OK                    = 0x00,
-  DAP_ERROR                 = 0xff,
-};
-
-enum
-{
-  SWD_DP_R_IDCODE           = 0x00,
-  SWD_DP_W_ABORT            = 0x00,
-  SWD_DP_R_CTRL_STAT        = 0x04,
-  SWD_DP_W_CTRL_STAT        = 0x04, // When CTRLSEL == 0
-  SWD_DP_W_WCR              = 0x04, // When CTRLSEL == 1
-  SWD_DP_R_RESEND           = 0x08,
-  SWD_DP_W_SELECT           = 0x08,
-  SWD_DP_R_RDBUFF           = 0x0c,
-};
-
-/*- Constants ---------------------------------------------------------------*/
-static const char * const dap_info_strings[] =
-{
-  [DAP_INFO_VENDOR]        = DAP_CONFIG_VENDOR_STR,
-  [DAP_INFO_PRODUCT]       = DAP_CONFIG_PRODUCT_STR,
-  [DAP_INFO_SER_NUM]       = DAP_CONFIG_SER_NUM_STR,
-  [DAP_INFO_FW_VER]        = DAP_CONFIG_FW_VER_STR,
-  [DAP_INFO_DEVICE_VENDOR] = DAP_CONFIG_DEVICE_VENDOR_STR,
-  [DAP_INFO_DEVICE_NAME]   = DAP_CONFIG_DEVICE_NAME_STR,
-};
-
-/*- Variables ---------------------------------------------------------------*/
-static int dap_port;
-static bool dap_abort;
-static uint32_t dap_match_mask;
-static int dap_idle_cycles;
-static int dap_retry_count;
-static int dap_match_retry_count;
-static int dap_clock_delay;
-
-static void (*dap_swd_clock)(int);
-static void (*dap_swd_write)(uint32_t, int);
-static uint32_t (*dap_swd_read)(int);
-
-#ifdef DAP_CONFIG_ENABLE_SWD
-static int dap_swd_turnaround;
-static bool dap_swd_data_phase;
-#endif
-
-/*- Implementations ---------------------------------------------------------*/
 
 #define DEFINE_GPIO(name, gpio)                               \
   static inline void HAL_GPIO_##name##_set(void) {            \
@@ -390,6 +270,32 @@ DEFINE_GPIO(SWCLK_TCK, gpio_swclk)
 DEFINE_GPIO(nRESET, gpio_nreset)
 
 #undef DEFINE_GPIO
+
+//-----------------------------------------------------------------------------
+void dbg_open(int swdio_gpio_num, int swclk_gpio_num, int nreset_gpio_num)
+{
+  gpio_init(&gpio_swdio, swdio_gpio_num);
+  gpio_init(&gpio_swclk, swclk_gpio_num);
+  gpio_init(&gpio_nreset, nreset_gpio_num);
+  gpio_open(&gpio_swdio);
+  gpio_open(&gpio_swclk);
+  gpio_open(&gpio_nreset);
+  dap_init();
+}
+
+//-----------------------------------------------------------------------------
+void dbg_close(void)
+{
+  gpio_close(&gpio_swdio);
+  gpio_close(&gpio_swclk);
+  gpio_close(&gpio_nreset);
+}
+
+//-----------------------------------------------------------------------------
+int dbg_get_report_size(void)
+{
+  return report_size;
+}
 
 //-----------------------------------------------------------------------------
 static inline void DAP_CONFIG_SWCLK_TCK_write(int value)

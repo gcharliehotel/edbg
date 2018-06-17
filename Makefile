@@ -12,6 +12,7 @@ SRCS = \
 
 HDRS = \
   dap.h \
+  dap_common.h \
   dbg.h \
   edbg.h \
   target.h
