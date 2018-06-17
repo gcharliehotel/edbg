@@ -162,8 +162,8 @@ void gpio_close(gpio_t *gpio) {
   }
 }
 
-void gpio_change_direction(gpio_t *gpio, char *direction) {
-  check(gpio->direction_fd >= 0, "gpio_change_direction: fd < 0");
+void gpio_set_direction(gpio_t *gpio, char *direction) {
+  check(gpio->direction_fd >= 0, "gpio_set_direction: fd < 0");
   if (lseek(gpio->direction_fd, 0, SEEK_SET) < 0)
     perror_exit("lseek");
   int n = strlen(direction);
@@ -172,23 +172,33 @@ void gpio_change_direction(gpio_t *gpio, char *direction) {
     perror_exit("failed to set gpio direction");
 }
 
-void gpio_set_as_output(gpio_t *gpio, int initial_value) {
+void gpio_set_value(gpio_t *gpio, int value) {
+  check(gpio->value_fd >= 0, "gpio_set: fd < 0");
+  if (lseek(gpio->value_fd, 0, SEEK_SET) < 0)
+    perror_exit("lseek");
+  char cc = value ? '1' : '0';
+  int n = write(gpio->value_fd, &cc, 1);
+  if (n != 1)
+    error_exit("failed to set gpio %d to %d\n", gpio->num, value);
+}
+
+void gpio_make_output(gpio_t *gpio, int initial_value) {
   gpio->dir = GPIO_DIR_OUT;
-  gpio_change_direction(gpio, initial_value ? "high" : "low");
+  gpio_set_direction(gpio, initial_value ? "high" : "low");
 }
 
-void gpio_set_as_input(gpio_t *gpio) {
+void gpio_make_input(gpio_t *gpio) {
   gpio->dir = GPIO_DIR_IN;
-  gpio_change_direction(gpio, "in");
+  gpio_set_direction(gpio, "in");
 }
 
-void gpio_set_as_input_with_pullup(gpio_t *gpio) {
+void gpio_make_input_with_pullup(gpio_t *gpio) {
   // This doesn't activate any pullup -- that can't be done with the
   // sysfs interface.  Rather this makes the gpio work on GPIO port
   // that has a pullup.  That pullup must be established elsewhere
   // (device tree gpio config, external resistor, etc.).
   gpio->dir = GPIO_DIR_IN_PULLUP;
-  gpio_change_direction(gpio, "in");
+  gpio_set_direction(gpio, "in");
 }
 
 int gpio_read(gpio_t *gpio) {
@@ -209,31 +219,22 @@ int gpio_read(gpio_t *gpio) {
   }
 }
 
-void gpio_change_value(gpio_t *gpio, int value) {
-  check(gpio->value_fd >= 0, "gpio_set: fd < 0");
-  if (lseek(gpio->value_fd, 0, SEEK_SET) < 0)
-    perror_exit("lseek");
-  char cc = value ? '1' : '0';
-  int n = write(gpio->value_fd, &cc, 1);
-  if (n != 1)
-    error_exit("failed to set gpio %d to %d\n", gpio->num, value);
-}
-
 void gpio_write(gpio_t *gpio, int value) {
   switch (gpio->dir) {
   case GPIO_DIR_IN:
-    // The code does this.  Not sure why. Just ignore it.
+    // The code writes to inputs.  Not sure why.  Doesn't seem to 
+    // matter, so we (quietly) ignore these calls.
     // warning("gpio %d: cannot write %d to input", gpio->num, value);
     break;
   case GPIO_DIR_IN_PULLUP:
     if (value) {
-      gpio_change_direction(gpio, "in");
+      gpio_set_direction(gpio, "in");
     } else {
-      gpio_change_direction(gpio, "low");
+      gpio_set_direction(gpio, "low");
     }
     break;
   case GPIO_DIR_OUT:
-    gpio_change_value(gpio, value);
+    gpio_set_value(gpio, value);
     break;
   default:
     error_exit("gpio %d: undefined direction", gpio->num);
@@ -256,13 +257,13 @@ void gpio_write(gpio_t *gpio, int value) {
     return gpio_read(&gpio);                                  \
   }                                                           \
   static inline void HAL_GPIO_##name##_in(void) {             \
-    gpio_set_as_input(&gpio);                                 \
+    gpio_make_input(&gpio);                                   \
   }                                                           \
   static inline void HAL_GPIO_##name##_out(void) {            \
-    gpio_set_as_output(&gpio, 0);                             \
+    gpio_make_output(&gpio, 0);  /* what inital value? */     \
   }                                                           \
   static inline void HAL_GPIO_##name##_pullup(void) {         \
-    gpio_set_as_input_with_pullup(&gpio);                     \
+    gpio_make_input_with_pullup(&gpio);                       \
   }
 
 DEFINE_GPIO(SWDIO_TMS, gpio_swdio)
@@ -275,11 +276,14 @@ DEFINE_GPIO(nRESET, gpio_nreset)
 void dbg_open(int swdio_gpio_num, int swclk_gpio_num, int nreset_gpio_num)
 {
   gpio_init(&gpio_swdio, swdio_gpio_num);
-  gpio_init(&gpio_swclk, swclk_gpio_num);
-  gpio_init(&gpio_nreset, nreset_gpio_num);
   gpio_open(&gpio_swdio);
+
+  gpio_init(&gpio_swclk, swclk_gpio_num);
   gpio_open(&gpio_swclk);
+
+  gpio_init(&gpio_nreset, nreset_gpio_num);
   gpio_open(&gpio_nreset);
+
   dap_init();
 }
 
