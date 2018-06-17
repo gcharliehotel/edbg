@@ -92,7 +92,6 @@ void gpio_open(gpio_t *gpio) {
 
   gpio_set_path(gpio, path, sizeof(path), "value");
   fd = open(path, O_RDWR);
-  //verbose("opened gpio %s as %d\n", path, fd);
   if (fd < 0)
     perror_exit("open()");
   gpio->value_fd = fd;
@@ -110,7 +109,6 @@ void gpio_close(gpio_t *gpio) {
 }
 
 void gpio_change_direction(gpio_t *gpio, char *direction) {
-  // verbose("setting gpio %d direction to %s\n", gpio->num, direction);
   check(gpio->direction_fd >= 0, "gpio_change_direction: fd < 0");
   if (lseek(gpio->direction_fd, 0, SEEK_SET) < 0)
     perror_exit("lseek");
@@ -121,7 +119,6 @@ void gpio_change_direction(gpio_t *gpio, char *direction) {
 }
 
 void gpio_set_as_output(gpio_t *gpio, int initial_value) {
-  //verbose("setting gpio %d as output to %d\n", gpio->num, initial_value);
   gpio->dir = GPIO_DIR_OUT;
   gpio_change_direction(gpio, initial_value ? "high" : "low");
 }
@@ -146,7 +143,6 @@ int gpio_read(gpio_t *gpio) {
     perror_exit("lseek");
   char cc;
   int n = read(gpio->value_fd, &cc, 1);
-  //verbose("read gpio %d as rc=%d, value=%d\n", gpio->num, n, cc);
   if (n != 1)
     perror_exit("read");
   if (cc == '0') {
@@ -170,10 +166,10 @@ void gpio_change_value(gpio_t *gpio, int value) {
 }
 
 void gpio_write(gpio_t *gpio, int value) {
-  // verbose("setting gpio %d to %d\n", gpio->num, value);
   switch (gpio->dir) {
   case GPIO_DIR_IN:
-    warning("gpio %d: cannot write %d to input", gpio->num, value);
+    // The code does this.  Not sure why. Just ignore it.
+    // warning("gpio %d: cannot write %d to input", gpio->num, value);
     break;
   case GPIO_DIR_IN_PULLUP:
     if (value) {
@@ -193,7 +189,6 @@ void gpio_write(gpio_t *gpio, int value) {
 //-----------------------------------------------------------------------------
 void dbg_open(int swdio_gpio_num, int swclk_gpio_num, int nreset_gpio_num)
 {
-  verbose("dbg_open\n");
   gpio_init(&gpio_swdio, swdio_gpio_num);
   gpio_init(&gpio_swclk, swclk_gpio_num);
   gpio_init(&gpio_nreset, nreset_gpio_num);
@@ -206,7 +201,6 @@ void dbg_open(int swdio_gpio_num, int swclk_gpio_num, int nreset_gpio_num)
 //-----------------------------------------------------------------------------
 void dbg_close(void)
 {
-  verbose("dbg_close\n");
   gpio_close(&gpio_swdio);
   gpio_close(&gpio_swclk);
   gpio_close(&gpio_nreset);
