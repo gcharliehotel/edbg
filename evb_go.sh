@@ -3,10 +3,15 @@
 set -o errexit
 set -o xtrace
 
-for n in 8 9 123; do
+# Prefix with ~ to invert.
+SWDIO_GPIO=8
+SWCLK_GPIO=123
+NRESET_GPIO=9
+
+for n in ${SWDIO_GPIO} ${SWCLK_GPIO} ${NRESET_GPIO}; do
   if [ \! -e /sys/class/gpio/gpio${n} ]; then
       echo -n $n > /sys/class/gpio/export
   fi
 done
 
-make && ./edbg -b -s 8 -S 123 -n 9 -t atmel_cm0p "$@"
+./edbg -b -s ${SWDIO_GPIO} -S ${SWCLK_GPIO} -n ${NRESET_GPIO} -t atmel_cm0p "$@"

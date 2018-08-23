@@ -592,6 +592,12 @@ int main(int argc, char **argv)
   if (g_nreset_gpio_config.num < 0)
     error_exit("No GPIO specificed for nRESET");
 
+  printf("SWDIO: gpio #%d, invert=%d\n",
+         g_swdio_gpio_config.num, g_swdio_gpio_config.invert);
+  printf("SWCLK: gpio #%d, invert=%d\n",
+         g_swclk_gpio_config.num, g_swclk_gpio_config.invert);
+  printf("NRESET: gpio #%d, invert=%d\n",
+         g_nreset_gpio_config.num, g_nreset_gpio_config.invert);
   dbg_open(&g_swdio_gpio_config, &g_swclk_gpio_config, &g_nreset_gpio_config);
 
   dap_reset_target_hw(0);
