@@ -175,10 +175,7 @@ void gpio_set_direction(gpio_t *gpio, char *direction) {
     perror_exit("failed to set gpio direction");
 }
 
-void gpio_set_value(gpio_t *gpio, bool value) {
-  if (gpio->invert) {
-    value = !value;
-  }
+void _gpio_set_value(gpio_t *gpio, bool value) {
   check(gpio->value_fd >= 0, "gpio_set: fd < 0");
   if (lseek(gpio->value_fd, 0, SEEK_SET) < 0)
     perror_exit("lseek");
@@ -207,7 +204,7 @@ void gpio_make_input_with_pullup(gpio_t *gpio) {
   gpio_set_direction(gpio, "in");
 }
 
-bool gpio_read(gpio_t *gpio) {
+bool _gpio_read(gpio_t *gpio) {
   check(gpio->value_fd >= 0, "gpio_read: fd < 0");
   if (lseek(gpio->value_fd, 0, SEEK_SET) < 0)
     perror_exit("lseek");
@@ -215,21 +212,32 @@ bool gpio_read(gpio_t *gpio) {
   int n = read(gpio->value_fd, &cc, 1);
   if (n != 1)
     perror_exit("read");
-  if (!((cc == '0') || (cc == '1'))) {
+  if (cc == '0') {
+    return false;
+  } else if (cc == '1') {
+    return true;
+  } else {
     error_exit("unexpected value read from gpio (0x%02X)", (int) cc);
     return false;
   }
-  bool bit = (cc == '1');
-  if (gpio->invert)
-    bit = !bit;
-  return bit;
 }
 
-void gpio_write(gpio_t *gpio, int value) {
+bool gpio_read(gpio_t *gpio) {
+  bool value = _gpio_read(gpio);
+  if (gpio->invert) {
+    return !value;
+  } else {
+    return value;
+  }
+}
+
+void gpio_write(gpio_t *gpio, bool value) {
+  if (gpio->invert)
+    value = !value;
   switch (gpio->dir) {
   case GPIO_DIR_IN:
-    // The code writes to inputs.  Not sure why.  Doesn't seem to
-    // matter, so we (quietly) ignore these calls.
+    // The code writes to inputs.  Not sure why.  It doesn't seem to matter, so
+    // we (quietly) ignore these calls.
     // warning("gpio %d: cannot write %d to input", gpio->num, value);
     break;
   case GPIO_DIR_IN_PULLUP:
@@ -240,7 +248,7 @@ void gpio_write(gpio_t *gpio, int value) {
     }
     break;
   case GPIO_DIR_OUT:
-    gpio_set_value(gpio, value);
+    _gpio_set_value(gpio, value);
     break;
   default:
     error_exit("gpio %d: undefined direction", gpio->num);
@@ -283,6 +291,9 @@ void dbg_open(gpio_config_t *swdio_gpio_config,
               gpio_config_t *swclk_gpio_config,
               gpio_config_t *nreset_gpio_config)
 {
+  if (swdio_gpio_config->invert)
+    error_exit("Inverting SWDIO is not supported.");
+
   gpio_init(&gpio_swdio, swdio_gpio_config);
   gpio_open(&gpio_swdio);
 
@@ -1107,7 +1118,7 @@ static void dap_swj_pins(uint8_t *req, uint8_t *resp)
   int value = req[0];
   int select = req[1];
   int wait;
-  
+
   wait = ((int)req[5] << 24) | ((int)req[4] << 16) | ((int)req[3] << 8) | req[2];
 
   if (select & DAP_SWJ_SWCLK_TCK)

@@ -587,6 +587,8 @@ int main(int argc, char **argv)
 
   if (g_swdio_gpio_config.num < 0)
     error_exit("No GPIO specificed for SWDIO");
+  if (g_swdio_gpio_config.invert)
+    error_exit("Inversion of SWDIO is not supported.");
   if (g_swclk_gpio_config.num < 0)
     error_exit("No GPIO specificed for SWCLK");
   if (g_nreset_gpio_config.num < 0)
