@@ -36,22 +36,17 @@
 /*- Definitions -------------------------------------------------------------*/
 
 /*- Types -------------------------------------------------------------------*/
-#if 0
 typedef struct
 {
-  char     *path;
-  char     *serial;
-  wchar_t  *wserial;
-  char     *manufacturer;
-  char     *product;
-  int      vid;
-  int      pid;
-} debugger_t;
-#endif
+  int num;
+  bool invert;
+} gpio_config_t;
 
 /*- Prototypes --------------------------------------------------------------*/
 //int dbg_enumerate(debugger_t *debuggers, int size);
-void dbg_open(int swdio_gpio_num, int swclk_gpio_num, int nreset_gpio_num);
+void dbg_open(gpio_config_t *swdio_gpio_config,
+              gpio_config_t *swclk_gpio_config,
+              gpio_config_t *nreset_gpio_num);
 void dbg_close(void);
 int dbg_get_report_size(void);
 int dbg_dap_cmd(uint8_t *data, int size, int rsize);

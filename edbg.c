@@ -84,9 +84,9 @@ static const char *short_options = "hbepvkrf:t:s:S:n:c:o:z:F:";
 
 //static char *g_serial = NULL;
 //static bool g_list = false;
-static int g_swdio_gpio_num = -1;
-static int g_swclk_gpio_num = -1;
-static int g_nreset_gpio_num = -1;
+static gpio_config_t g_swdio_gpio_config = { -1, false };
+static gpio_config_t g_swclk_gpio_config = { -1, false };
+static gpio_config_t g_nreset_gpio_config = { -1, false };
 static char *g_target = NULL;
 static bool g_verbose = false;
 static long g_clock = 16000000;
@@ -377,9 +377,9 @@ static void print_help(char *name, char *param)
     printf("  -r, --read                 read the whole content of the chip flash\n");
     printf("  -f, --file <file>          binary file to be programmed or verified; also read output file name\n");
     printf("  -t, --target <name>        specify a target type (use '-t list' for a list of supported target types)\n");
-    printf("  -s, --swdio <number>       gpio number for SWDIO\n");
-    printf("  -S, --swclk <number>       gpio number for SWCLK\n");
-    printf("  -n, --nreset <number>      gpio number for nRESET\n");
+    printf("  -s, --swdio <number>       gpio number for SWDIO, prefix with ~ to invert\n");
+    printf("  -S, --swclk <number>       gpio number for SWCLK, prefix with ~ to invert\n");
+    printf("  -n, --nreset <number>      gpio number for nRESET, prefix with ~ to invert\n");
     printf("  -c, --clock <freq>         interface clock frequency in kHz (default 16000)\n");
     printf("  -o, --offset <offset>      offset for the operation\n");
     printf("  -z, --size <size>          size for the operation\n");
@@ -471,6 +471,19 @@ static void parse_fuse_options(char *str)
 }
 
 //-----------------------------------------------------------------------------
+static void parse_gpio_config(gpio_config_t *config, char *s)
+{
+  if (*s == '~') {
+    config->invert = 1;
+    s++;
+  } else {
+    config->invert = 0;
+  }
+  config->num = strtoul(s, NULL, 0);
+}
+
+
+//-----------------------------------------------------------------------------
 static void parse_command_line(int argc, char **argv)
 {
   int option_index = 0;
@@ -489,9 +502,9 @@ static void parse_command_line(int argc, char **argv)
       case 'f': g_target_options.name = optarg; break;
       case 't': g_target = optarg; break;
       //case 'l': g_list = true; break;
-      case 's': g_swdio_gpio_num = strtoul(optarg, NULL, 0); break;
-      case 'S': g_swclk_gpio_num = strtoul(optarg, NULL, 0); break;
-      case 'n': g_nreset_gpio_num =  strtoul(optarg, NULL, 0); break;
+      case 's': parse_gpio_config(&g_swdio_gpio_config, optarg); break;
+      case 'S': parse_gpio_config(&g_swclk_gpio_config, optarg); break;
+      case 'n': parse_gpio_config(&g_nreset_gpio_config, optarg); break;
       case 'c': g_clock = strtoul(optarg, NULL, 0) * 1000; break;
       case 'b': g_verbose = true; break;
       case 'o': g_target_options.offset = (uint32_t)strtoul(optarg, NULL, 0); break;
@@ -572,14 +585,14 @@ int main(int argc, char **argv)
     error_exit("more than one debugger found, please specify a serial number");
 #endif
 
-  if (g_swdio_gpio_num < 0)
+  if (g_swdio_gpio_config.num < 0)
     error_exit("No GPIO specificed for SWDIO");
-  if (g_swclk_gpio_num < 0)
+  if (g_swclk_gpio_config.num < 0)
     error_exit("No GPIO specificed for SWCLK");
-  if (g_nreset_gpio_num < 0)
+  if (g_nreset_gpio_config.num < 0)
     error_exit("No GPIO specificed for nRESET");
 
-  dbg_open(g_swdio_gpio_num, g_swclk_gpio_num, g_nreset_gpio_num);
+  dbg_open(&g_swdio_gpio_config, &g_swclk_gpio_config, &g_nreset_gpio_config);
 
   dap_reset_target_hw(0);
 

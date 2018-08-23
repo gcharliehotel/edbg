@@ -69,6 +69,8 @@
 typedef struct
 {
   int num;
+  bool invert;
+
   int value_fd;
   int direction_fd;
   int dir;
@@ -124,8 +126,9 @@ void dap_init(void);
 
 //-----------------------------------------------------------------------------
 
-void gpio_init(gpio_t *gpio, int gpio_num) {
-  gpio->num = gpio_num;
+void gpio_init(gpio_t *gpio, gpio_config_t *config) {
+  gpio->num = config->num;
+  gpio->invert = config->invert;
   gpio->value_fd = -1;
   gpio->direction_fd = -1;
   gpio->dir = GPIO_DIR_UNDEFINED;
@@ -172,7 +175,10 @@ void gpio_set_direction(gpio_t *gpio, char *direction) {
     perror_exit("failed to set gpio direction");
 }
 
-void gpio_set_value(gpio_t *gpio, int value) {
+void gpio_set_value(gpio_t *gpio, bool value) {
+  if (gpio->invert) {
+    value = !value;
+  }
   check(gpio->value_fd >= 0, "gpio_set: fd < 0");
   if (lseek(gpio->value_fd, 0, SEEK_SET) < 0)
     perror_exit("lseek");
@@ -201,7 +207,7 @@ void gpio_make_input_with_pullup(gpio_t *gpio) {
   gpio_set_direction(gpio, "in");
 }
 
-int gpio_read(gpio_t *gpio) {
+bool gpio_read(gpio_t *gpio) {
   check(gpio->value_fd >= 0, "gpio_read: fd < 0");
   if (lseek(gpio->value_fd, 0, SEEK_SET) < 0)
     perror_exit("lseek");
@@ -209,20 +215,20 @@ int gpio_read(gpio_t *gpio) {
   int n = read(gpio->value_fd, &cc, 1);
   if (n != 1)
     perror_exit("read");
-  if (cc == '0') {
-    return 0;
-  } else if (cc == '1') {
-    return 1;
-  } else {
+  if (!((cc == '0') || (cc == '1'))) {
     error_exit("unexpected value read from gpio (0x%02X)", (int) cc);
-    return -1;
+    return false;
   }
+  bool bit = (cc == '1');
+  if (gpio->invert)
+    bit = !bit;
+  return bit;
 }
 
 void gpio_write(gpio_t *gpio, int value) {
   switch (gpio->dir) {
   case GPIO_DIR_IN:
-    // The code writes to inputs.  Not sure why.  Doesn't seem to 
+    // The code writes to inputs.  Not sure why.  Doesn't seem to
     // matter, so we (quietly) ignore these calls.
     // warning("gpio %d: cannot write %d to input", gpio->num, value);
     break;
@@ -273,15 +279,17 @@ DEFINE_GPIO(nRESET, gpio_nreset)
 #undef DEFINE_GPIO
 
 //-----------------------------------------------------------------------------
-void dbg_open(int swdio_gpio_num, int swclk_gpio_num, int nreset_gpio_num)
+void dbg_open(gpio_config_t *swdio_gpio_config,
+              gpio_config_t *swclk_gpio_config,
+              gpio_config_t *nreset_gpio_config)
 {
-  gpio_init(&gpio_swdio, swdio_gpio_num);
+  gpio_init(&gpio_swdio, swdio_gpio_config);
   gpio_open(&gpio_swdio);
 
-  gpio_init(&gpio_swclk, swclk_gpio_num);
+  gpio_init(&gpio_swclk, swclk_gpio_config);
   gpio_open(&gpio_swclk);
 
-  gpio_init(&gpio_nreset, nreset_gpio_num);
+  gpio_init(&gpio_nreset, nreset_gpio_config);
   gpio_open(&gpio_nreset);
 
   dap_init();
